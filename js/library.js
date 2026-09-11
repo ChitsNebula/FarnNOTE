@@ -9,6 +9,7 @@ window.LibraryController = class LibraryController {
     this.grid = document.getElementById('notebook-grid');
     this.emptyState = document.getElementById('empty-state');
     this.searchInput = document.getElementById('library-search');
+    this.btnClearSearch = document.getElementById('btn-clear-search');
     this.countAllBadge = document.getElementById('count-all');
     this.modalNewNotebook = document.getElementById('modal-new-notebook');
 
@@ -28,16 +29,18 @@ window.LibraryController = class LibraryController {
     this.selectedCoverImage = null;
     this.currentFilter = 'all';
     this.activeContextMenuNotebook = null;
+    this._allNotebooks = [];
 
     this.initEvents();
   }
 
   async loadLibrary() {
     const notebooks = await window.Storage.getAllNotebooks();
+    this._allNotebooks = notebooks || [];
     this.populateGroupSelects();
-    this.renderSidebarGroups(notebooks);
-    this.renderNotebooks(notebooks);
-    this.updateCountBadge(notebooks.length);
+    this.renderSidebarGroups(this._allNotebooks);
+    this.renderNotebooks(this._allNotebooks);
+    this.updateCountBadge(this._allNotebooks.length);
   }
 
   renderSidebarGroups(notebooks) {
@@ -121,30 +124,53 @@ window.LibraryController = class LibraryController {
   renderNotebooks(notebooks) {
     this.grid.innerHTML = '';
 
-    let filtered = notebooks;
+    let filtered = notebooks || [];
 
     if (this.currentFilter === 'favorites') {
-      filtered = notebooks.filter(n => n.favorite);
+      filtered = filtered.filter(n => n.favorite);
     } else if (this.currentFilter === 'recent') {
-      filtered = notebooks.slice(0, 4);
+      filtered = filtered.slice(0, 4);
     } else if (this.currentFilter.startsWith('group-')) {
       const groupId = this.currentFilter;
-      filtered = notebooks.filter(n => n.groupId === groupId);
+      filtered = filtered.filter(n => n.groupId === groupId);
     }
 
-    const query = this.searchInput.value.trim().toLowerCase();
+    const groups = window.Storage.getGroups();
+    const rawQuery = this.searchInput ? this.searchInput.value.trim() : '';
+    const query = rawQuery.toLowerCase();
+
+    if (this.btnClearSearch) {
+      this.btnClearSearch.classList.toggle('hidden', !rawQuery);
+    }
+
     if (query) {
-      filtered = filtered.filter(n => n.title.toLowerCase().includes(query));
+      filtered = filtered.filter(n => {
+        const titleMatch = (n.title || '').toLowerCase().includes(query);
+        const originalFileMatch = (n.originalFileName || '').toLowerCase().includes(query);
+        const group = groups.find(g => g.id === n.groupId);
+        const groupMatch = group && group.name.toLowerCase().includes(query);
+        return titleMatch || originalFileMatch || groupMatch;
+      });
     }
 
     if (filtered.length === 0) {
       this.emptyState.classList.remove('hidden');
+      const emptyTitle = this.emptyState.querySelector('h3');
+      const emptyDesc = this.emptyState.querySelector('p');
+      const emptyBtn = this.emptyState.querySelector('button');
+      if (query) {
+        if (emptyTitle) emptyTitle.innerText = 'ไม่พบผลการค้นหา';
+        if (emptyDesc) emptyDesc.innerText = `ไม่พบสมุดโน้ตหรือเอกสารที่ตรงกับ "${rawQuery}"`;
+        if (emptyBtn) emptyBtn.classList.add('hidden');
+      } else {
+        if (emptyTitle) emptyTitle.innerText = 'ยังไม่มีสมุดโน้ต';
+        if (emptyDesc) emptyDesc.innerText = 'เริ่มต้นสร้างสมุดโน้ตเล่มแรก หรือ นำเข้าไฟล์ PDF เพื่อเริ่มจดบันทึก';
+        if (emptyBtn) emptyBtn.classList.remove('hidden');
+      }
       return;
     }
 
     this.emptyState.classList.add('hidden');
-
-    const groups = window.Storage.getGroups();
 
     filtered.forEach(nb => {
       const card = document.createElement('div');
@@ -274,6 +300,41 @@ window.LibraryController = class LibraryController {
   }
 
   initEvents() {
+    // ── Search Input & Clear Button ──────────────────────────────────────────
+    if (this.searchInput) {
+      const handleSearch = () => {
+        if (this._allNotebooks && this._allNotebooks.length) {
+          this.renderNotebooks(this._allNotebooks);
+        } else {
+          this.loadLibrary();
+        }
+      };
+
+      this.searchInput.addEventListener('input', handleSearch);
+
+      this.searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this.searchInput.value = '';
+          handleSearch();
+          this.searchInput.blur();
+        }
+      });
+    }
+
+    if (this.btnClearSearch) {
+      this.btnClearSearch.addEventListener('click', () => {
+        if (this.searchInput) {
+          this.searchInput.value = '';
+          this.searchInput.focus();
+        }
+        if (this._allNotebooks && this._allNotebooks.length) {
+          this.renderNotebooks(this._allNotebooks);
+        } else {
+          this.loadLibrary();
+        }
+      });
+    }
+
     // ── Fullscreen Toggle on Library Header ──────────────────────────────────
     const btnLibFs = document.getElementById('btn-library-fullscreen');
     const libFsIcon = document.getElementById('library-fullscreen-icon');

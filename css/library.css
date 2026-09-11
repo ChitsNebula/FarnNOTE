@@ -213,6 +213,21 @@
   font-size: 13px;
 }
 
+.btn-clear-search {
+  background: none;
+  border: none;
+  color: var(--gn-text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  transition: color var(--transition-fast);
+}
+.btn-clear-search:hover {
+  color: var(--gn-text-primary);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
