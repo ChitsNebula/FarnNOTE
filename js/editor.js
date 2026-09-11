@@ -580,6 +580,7 @@ window.addEventListener('message', function(e) {
         btn.classList.add('active');
         window.ToolState.currentTool = tool;
 
+        this.updateToolbarSizeDots();
         this.showToolPopover(tool, btn);
       });
     });
@@ -589,6 +590,7 @@ window.addEventListener('message', function(e) {
       document.querySelectorAll('#main-toolbar .tool-btn').forEach(b => b.classList.remove('active'));
       const btn = document.querySelector(`#main-toolbar .tool-btn[data-tool="${tool}"]`);
       if (btn) btn.classList.add('active');
+      this.updateToolbarSizeDots();
     };
 
     document.querySelectorAll('#quick-colors .color-dot').forEach(dot => {
@@ -614,13 +616,29 @@ window.addEventListener('message', function(e) {
     this.initColorWheel();
 
 
-    document.querySelectorAll('#quick-sizes .size-dot').forEach(dot => {
+    document.querySelectorAll('#quick-sizes .size-dot').forEach((dot, dotIdx) => {
       dot.addEventListener('click', () => {
         document.querySelectorAll('#quick-sizes .size-dot').forEach(d => d.classList.remove('active'));
         dot.classList.add('active');
-        window.ToolState.size = parseInt(dot.dataset.size, 10);
+
+        const tool = window.ToolState.currentTool;
+        if (tool === 'highlighter') {
+          const sizes = [14, 24, 38];
+          window.ToolState.highlighterSize = sizes[dotIdx];
+        } else if (tool === 'pencil') {
+          const sizes = [1.5, 3, 6];
+          window.ToolState.pencilSize = sizes[dotIdx];
+        } else if (tool === 'eraser') {
+          const sizes = [12, 24, 44];
+          window.ToolState.eraserSize = sizes[dotIdx];
+        } else {
+          const sizes = [2, 4, 8];
+          window.ToolState.size = sizes[dotIdx];
+        }
       });
     });
+
+    this.updateToolbarSizeDots();
 
     // ── Draggable Toolbar with Magnetic Snap Zones ───────────────────────────
     this.initToolbarDraggable();
@@ -1259,6 +1277,48 @@ window.addEventListener('message', function(e) {
   }
 
 
+  updateToolbarSizeDots() {
+    const tool = window.ToolState.currentTool;
+    const dots = document.querySelectorAll('#quick-sizes .size-dot');
+    if (!dots || dots.length < 3) return;
+
+    dots.forEach(d => d.classList.remove('active'));
+
+    if (tool === 'highlighter') {
+      const sz = window.ToolState.highlighterSize || 24;
+      dots[0].title = 'เส้นบาง (14px)';
+      dots[1].title = 'เส้นปานกลาง (24px)';
+      dots[2].title = 'เส้นหนา (38px)';
+      if (sz <= 18) dots[0].classList.add('active');
+      else if (sz <= 30) dots[1].classList.add('active');
+      else dots[2].classList.add('active');
+    } else if (tool === 'pencil') {
+      const sz = window.ToolState.pencilSize || 3;
+      dots[0].title = 'เส้นบาง (1.5px)';
+      dots[1].title = 'เส้นปานกลาง (3px)';
+      dots[2].title = 'เส้นหนา (6px)';
+      if (sz <= 2) dots[0].classList.add('active');
+      else if (sz <= 4) dots[1].classList.add('active');
+      else dots[2].classList.add('active');
+    } else if (tool === 'eraser') {
+      const sz = window.ToolState.eraserSize || 20;
+      dots[0].title = 'ยางลบเล็ก (12px)';
+      dots[1].title = 'ยางลบกลาง (24px)';
+      dots[2].title = 'ยางลบใหญ่ (44px)';
+      if (sz <= 16) dots[0].classList.add('active');
+      else if (sz <= 32) dots[1].classList.add('active');
+      else dots[2].classList.add('active');
+    } else {
+      const sz = window.ToolState.size || 4;
+      dots[0].title = 'เส้นบาง (2px)';
+      dots[1].title = 'เส้นปานกลาง (4px)';
+      dots[2].title = 'เส้นหนา (8px)';
+      if (sz <= 2) dots[0].classList.add('active');
+      else if (sz <= 5) dots[1].classList.add('active');
+      else dots[2].classList.add('active');
+    }
+  }
+
   // ─── TOOL POPOVER ────────────────────────────────────────────────────────────
 
   showToolPopover(tool, targetBtn) {
@@ -1302,6 +1362,54 @@ window.addEventListener('message', function(e) {
           this.toolPopover.querySelectorAll('.option-chip').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
           window.ToolState.penStyle = chip.dataset.style;
+          this.resetToolPopoverAutoFade();
+        });
+      });
+
+    } else if (tool === 'highlighter') {
+      const currentSize = window.ToolState.highlighterSize || 24;
+      this.toolPopover.innerHTML = `
+        <div class="form-group" style="margin-bottom:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label style="margin-bottom:0;">ขนาดปากกาไฮไลท์ (HIGHLIGHTER SIZE)</label>
+            <span id="hl-size-val" style="font-size:13px; font-weight:600; color:#FF9500;">${currentSize}px</span>
+          </div>
+          <div class="option-chips-group" style="margin-bottom:10px;">
+            <button class="option-chip ${currentSize <= 18 ? 'active' : ''}" data-size="14">บาง (14px)</button>
+            <button class="option-chip ${currentSize > 18 && currentSize <= 30 ? 'active' : ''}" data-size="24">กลาง (24px)</button>
+            <button class="option-chip ${currentSize > 30 ? 'active' : ''}" data-size="38">หนา (38px)</button>
+          </div>
+          <input type="range" id="hl-size-slider" min="6" max="60" value="${currentSize}" style="width:100%; accent-color:#FF9500; cursor:pointer;">
+        </div>
+      `;
+      this.toolPopover.classList.remove('hidden');
+
+      const slider = document.getElementById('hl-size-slider');
+      const valText = document.getElementById('hl-size-val');
+
+      if (slider) {
+        slider.addEventListener('input', (e) => {
+          const sz = parseInt(e.target.value, 10);
+          window.ToolState.highlighterSize = sz;
+          if (valText) valText.innerText = `${sz}px`;
+          this.toolPopover.querySelectorAll('.option-chip').forEach(c => {
+            const chipSize = parseInt(c.dataset.size, 10);
+            c.classList.toggle('active', Math.abs(chipSize - sz) <= 3);
+          });
+          this.updateToolbarSizeDots();
+          this.resetToolPopoverAutoFade();
+        });
+      }
+
+      this.toolPopover.querySelectorAll('.option-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          this.toolPopover.querySelectorAll('.option-chip').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+          const sz = parseInt(chip.dataset.size, 10);
+          window.ToolState.highlighterSize = sz;
+          if (slider) slider.value = sz;
+          if (valText) valText.innerText = `${sz}px`;
+          this.updateToolbarSizeDots();
           this.resetToolPopoverAutoFade();
         });
       });
