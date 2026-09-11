@@ -65,6 +65,38 @@ window.CanvasEngine = class CanvasEngine {
     this.onZoomChanged = options.onZoomChanged || (() => {});
 
     this.bindViewportScroll();
+    this._currentCursorStyle = null;
+    this.updateCursorColor();
+  }
+
+  updateCursorColor() {
+    const tool = (window.ToolState && window.ToolState.currentTool) || 'pen';
+    let cursorStyle = 'crosshair';
+
+    if (tool === 'eraser') {
+      cursorStyle = 'crosshair';
+    } else if (tool === 'lasso') {
+      cursorStyle = 'crosshair';
+    } else if (tool === 'text') {
+      cursorStyle = 'text';
+    } else if (tool === 'highlighter') {
+      const hex = (window.ToolState && window.ToolState.highlighterHex) || '#FFD60A';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="10" rx="3" fill="${hex}4D" stroke="rgba(0,0,0,0.45)" stroke-width="1.5"/><rect x="5" y="7" width="14" height="10" rx="3" fill="none" stroke="#FFFFFF" stroke-width="1"/><circle cx="12" cy="12" r="3" fill="${hex}"/><circle cx="12" cy="12" r="1" fill="#FFFFFF"/></svg>`;
+      cursorStyle = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 12 12, crosshair`;
+    } else if (tool === 'pen' || tool === 'pencil' || tool === 'shape') {
+      const color = (tool === 'pencil' ? window.ToolState.pencilColor : window.ToolState.color) || '#1C1C1E';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.5" fill="none" stroke="rgba(0,0,0,0.4)" stroke-width="2"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="#FFFFFF" stroke-width="1.2"/><circle cx="12" cy="12" r="3.5" fill="${color}"/><circle cx="12" cy="12" r="1" fill="#FFFFFF"/></svg>`;
+      cursorStyle = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 12 12, crosshair`;
+    }
+
+    this._currentCursorStyle = cursorStyle;
+
+    const views = this.pageViews || this.pages || [];
+    views.forEach(v => {
+      if (v && v.uiCanvas) {
+        v.uiCanvas.style.cursor = cursorStyle;
+      }
+    });
   }
 
   updateToolUI(toolName) {
@@ -75,6 +107,7 @@ window.CanvasEngine = class CanvasEngine {
         btn.classList.remove('active');
       }
     });
+    this.updateCursorColor();
   }
 
   restorePreviousToolIfEraser() {
@@ -592,6 +625,10 @@ window.CanvasEngine = class CanvasEngine {
 
     // Bind pointer events NOW that uiCanvas exists
     this.bindPagePointerEvents(view);
+
+    if (this._currentCursorStyle && view.uiCanvas) {
+      view.uiCanvas.style.cursor = this._currentCursorStyle;
+    }
 
     view.canvasReady   = true;
     view.canvasLoading = false;

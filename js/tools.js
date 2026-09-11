@@ -21,6 +21,7 @@ window.ToolState = {
   eraserMode: 'pixel', // 'pixel', 'object'
   eraserSize: 20,
   highlighterColor: 'rgba(255, 214, 10, 0.4)',
+  highlighterHex: '#FFD60A',
   highlighterSize: 24,
   pencilColor: '#3A3A3C',
   pencilSize: 3,
