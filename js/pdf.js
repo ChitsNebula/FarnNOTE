@@ -79,17 +79,23 @@ window.PDFEngine = {
     const ctx    = canvas.getContext('2d');
 
     const firstPage = await pdfDoc.getPage(1);
-    const firstViewport = firstPage.getViewport({ scale: 1.4 });
-    const firstW = Math.round(firstViewport.width);
-    const firstH = Math.round(firstViewport.height);
+    // Base layout viewport at 1.4 for CSS dimensions
+    const firstLayoutVp = firstPage.getViewport({ scale: 1.4 });
+    const firstW = Math.round(firstLayoutVp.width);
+    const firstH = Math.round(firstLayoutVp.height);
 
-    canvas.width  = firstW;
-    canvas.height = firstH;
+    // High-resolution Retina viewport at 2.2 for razor-sharp vector-grade clarity
+    const firstRenderVp = firstPage.getViewport({ scale: 2.2 });
+    canvas.width  = Math.round(firstRenderVp.width);
+    canvas.height = Math.round(firstRenderVp.height);
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await firstPage.render({ canvasContext: ctx, viewport: firstViewport }).promise;
+    await firstPage.render({ canvasContext: ctx, viewport: firstRenderVp }).promise;
 
-    const firstBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+    let firstBlob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.96));
+    if (!firstBlob) {
+      firstBlob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    }
     await storage.saveAsset(`asset-${notebookId}-page-1`, firstBlob);
 
     // Create page objects for ALL pages so the notebook structure is ready instantly.
@@ -126,18 +132,22 @@ window.PDFEngine = {
             if (existing) continue; // Already rendered on-demand!
 
             const page     = await pdfDoc.getPage(pageNum);
-            const viewport = page.getViewport({ scale: 1.4 });
-            const pW       = Math.round(viewport.width);
-            const pH       = Math.round(viewport.height);
+            const layoutVp = page.getViewport({ scale: 1.4 });
+            const pW       = Math.round(layoutVp.width);
+            const pH       = Math.round(layoutVp.height);
 
-            canvas.width  = pW;
-            canvas.height = pH;
+            const renderVp = page.getViewport({ scale: 2.2 });
+            canvas.width  = Math.round(renderVp.width);
+            canvas.height = Math.round(renderVp.height);
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            await page.render({ canvasContext: ctx, viewport }).promise;
+            await page.render({ canvasContext: ctx, viewport: renderVp }).promise;
 
-            const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+            let blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.96));
+            if (!blob) {
+              blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+            }
             await storage.saveAsset(assetId, blob);
 
             const pageObj = await storage.getPage(`page-${notebookId}-${pageNum}`);

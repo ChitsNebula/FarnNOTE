@@ -412,9 +412,11 @@ window.CanvasEngine = class CanvasEngine {
     // Landscape pages (wider than tall) use lower DPR to prevent GPU memory exhaustion.
     // Landscape at 1.75x is razor-sharp while cutting texture memory in half vs 3.0x.
     const isLandscape = width > height;
+    // Deliver Retina sharpness on every display: minimum 2.0x DPR
+    const deviceDpr = window.devicePixelRatio || 1;
     const dpr = isLandscape
-      ? Math.min(1.75, window.devicePixelRatio || 1)
-      : Math.min(3.0, Math.max(2.5, (window.devicePixelRatio || 1) * 2.0));
+      ? Math.max(2.0, Math.min(2.0, deviceDpr))
+      : Math.max(2.0, Math.min(2.5, deviceDpr * 1.25));
 
     const container = document.createElement('div');
     container.className = 'page-container';
@@ -541,23 +543,26 @@ window.CanvasEngine = class CanvasEngine {
 
             if (pdfDoc) {
               const pdfPage = await pdfDoc.getPage(view.index + 1);
-              const viewport = pdfPage.getViewport({ scale: 1.4 });
-              const pW = Math.round(viewport.width);
-              const pH = Math.round(viewport.height);
+              const renderVp = pdfPage.getViewport({ scale: 2.2 });
+              const rW = Math.round(renderVp.width);
+              const rH = Math.round(renderVp.height);
 
               const renderCanvas = document.createElement('canvas');
-              renderCanvas.width = pW;
-              renderCanvas.height = pH;
+              renderCanvas.width = rW;
+              renderCanvas.height = rH;
               const rCtx = renderCanvas.getContext('2d');
               rCtx.fillStyle = '#FFFFFF';
               rCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
-              await pdfPage.render({ canvasContext: rCtx, viewport }).promise;
+              await pdfPage.render({ canvasContext: rCtx, viewport: renderVp }).promise;
 
               if (view._renderSession === session && view.bgCtx) {
                 view.bgCtx.drawImage(renderCanvas, 0, 0, width, height);
               }
 
-              const newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/jpeg', 0.85));
+              let newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/webp', 0.96));
+              if (!newBlob) {
+                newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/png'));
+              }
               await this.storage.saveAsset(pageData.pdfAssetId, newBlob);
               renderedOnDemand = true;
             }
@@ -1945,13 +1950,22 @@ window.CanvasEngine = class CanvasEngine {
 
   drawSingleStroke(ctx, stroke) {
     const { points, tool, penStyle, color, size } = stroke;
-    if (!points || points.length < 2) return;
+    if (!points || points.length === 0) return;
 
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.lineCap  = 'round';
     ctx.lineJoin = 'round';
+
+    if (points.length === 1) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(points[0].x, points[0].y, Math.max(0.5, size / 2), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
 
     if (tool === 'highlighter') {
       ctx.globalCompositeOperation = 'multiply';
@@ -1996,23 +2010,52 @@ window.CanvasEngine = class CanvasEngine {
         ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
         ctx.stroke();
       } else {
-        // Smooth Quadratic Segments for Fountain / Brush Pen
-        for (let i = 1; i < points.length; i++) {
-          const p1 = points[i - 1];
-          const p2 = points[i];
+        // Continuous Midpoint Bézier Spline for Fountain & Brush Pen with dynamic pressure tapering
+        let midX = (points[0].x + points[1].x) / 2;
+        let midY = (points[0].y + points[1].y) / 2;
 
-          let width = size;
-          const pr1 = (p1.pressure !== undefined && !isNaN(p1.pressure)) ? p1.pressure : 0.75;
-          const pr2 = (p2.pressure !== undefined && !isNaN(p2.pressure)) ? p2.pressure : 0.75;
-          const pr = (pr1 + pr2) / 2;
-          width = size * (0.4 + pr * 0.9);
+        // First initial segment from p0 to mid0
+        const initPr = (points[0].pressure && !isNaN(points[0].pressure) && points[0].pressure > 0) ? points[0].pressure : 0.5;
+        const initW = Math.max(1, size * (penStyle === 'brush' ? (0.3 + initPr * 1.3) : (0.5 + initPr * 0.8)));
+        ctx.lineWidth = initW;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        ctx.lineTo(midX, midY);
+        ctx.stroke();
 
-          ctx.lineWidth = width;
+        for (let i = 1; i < points.length - 1; i++) {
+          const pCurrent = points[i];
+          const pNext = points[i + 1];
+          const nextMidX = (pCurrent.x + pNext.x) / 2;
+          const nextMidY = (pCurrent.y + pNext.y) / 2;
+
+          const pr = (pCurrent.pressure !== undefined && !isNaN(pCurrent.pressure) && pCurrent.pressure > 0)
+            ? pCurrent.pressure
+            : 0.5;
+          const pressureFactor = penStyle === 'brush'
+            ? (0.3 + pr * 1.3)
+            : (0.5 + pr * 0.8);
+          const segWidth = Math.max(1, size * pressureFactor);
+
+          ctx.lineWidth = segWidth;
           ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
+          ctx.moveTo(midX, midY);
+          ctx.quadraticCurveTo(pCurrent.x, pCurrent.y, nextMidX, nextMidY);
           ctx.stroke();
+
+          midX = nextMidX;
+          midY = nextMidY;
         }
+
+        // Final segment to last point
+        const lastPt = points[points.length - 1];
+        const lastPr = (lastPt.pressure && !isNaN(lastPt.pressure) && lastPt.pressure > 0) ? lastPt.pressure : 0.5;
+        const lastW = Math.max(1, size * (penStyle === 'brush' ? (0.3 + lastPr * 1.3) : (0.5 + lastPr * 0.8)));
+        ctx.lineWidth = lastW;
+        ctx.beginPath();
+        ctx.moveTo(midX, midY);
+        ctx.lineTo(lastPt.x, lastPt.y);
+        ctx.stroke();
       }
     }
 
