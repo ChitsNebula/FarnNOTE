@@ -1414,20 +1414,7 @@ window.addEventListener('message', function(e) {
 
     } else if (tool === 'highlighter') {
       const currentSize = window.ToolState.highlighterSize || 24;
-      const currentHex  = window.ToolState.highlighterHex  || '#FFD60A';
-      const hlPresets   = ['#FFD60A', '#34C759', '#007AFF', '#FF2D55', '#FF9500', '#AF52DE'];
-
       this.toolPopover.innerHTML = `
-        <div class="form-group" style="margin-bottom:12px;">
-          <label style="margin-bottom:6px;">สีปากกาไฮไลท์ (HIGHLIGHTER COLOR)</label>
-          <div class="hl-color-swatches" style="display:flex; gap:8px; align-items:center; padding:2px 0;">
-            ${hlPresets.map(c => `
-              <button type="button" class="hl-color-dot ${currentHex.toLowerCase() === c.toLowerCase() ? 'active' : ''}" 
-                      data-color="${c}" 
-                      style="background:${c};"></button>
-            `).join('')}
-          </div>
-        </div>
         <div class="form-group" style="margin-bottom:6px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
             <label style="margin-bottom:0;">ขนาดปากกาไฮไลท์ (HIGHLIGHTER SIZE)</label>
@@ -1442,19 +1429,6 @@ window.addEventListener('message', function(e) {
         </div>
       `;
       this.toolPopover.classList.remove('hidden');
-
-      // Highlighter color presets
-      this.toolPopover.querySelectorAll('.hl-color-dot').forEach(dot => {
-        dot.addEventListener('click', () => {
-          this.toolPopover.querySelectorAll('.hl-color-dot').forEach(d => d.classList.remove('active'));
-          dot.classList.add('active');
-          const hex = dot.dataset.color;
-          window.ToolState.highlighterHex = hex;
-          window.ToolState.highlighterColor = window.hexToRgba ? window.hexToRgba(hex, 0.4) : hex;
-          this.updateToolColorIndicators();
-          this.resetToolPopoverAutoFade();
-        });
-      });
 
       const slider = document.getElementById('hl-size-slider');
       const valText = document.getElementById('hl-size-val');
