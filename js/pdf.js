@@ -79,20 +79,29 @@ window.PDFEngine = {
     const ctx    = canvas.getContext('2d');
 
     const firstPage = await pdfDoc.getPage(1);
-    // Base layout viewport at 1.4 for CSS dimensions
-    const firstLayoutVp = firstPage.getViewport({ scale: 1.4 });
+    const unscaledVp = firstPage.getViewport({ scale: 1.0 });
+    const isLandscape = unscaledVp.width > unscaledVp.height;
+
+    // Standardize page layout width: ~794px for portrait (A4), ~1066px for landscape (16:9 slides)
+    // This prevents gigantic dimensions (e.g. 2688px+) when opening high-res slide PDFs
+    const targetLayoutW = isLandscape ? 1066 : 794;
+    const baseScale = targetLayoutW / unscaledVp.width;
+    const firstLayoutVp = firstPage.getViewport({ scale: baseScale });
     const firstW = Math.round(firstLayoutVp.width);
     const firstH = Math.round(firstLayoutVp.height);
 
-    // High-resolution Retina viewport at 2.2 for razor-sharp vector-grade clarity
-    const firstRenderVp = firstPage.getViewport({ scale: 2.2 });
+    // High-resolution Retina viewport: cap render canvas max dimension at 2200px
+    // This guarantees razor-sharp text while staying strictly inside safe GPU VRAM limits
+    const maxUnscaledDim = Math.max(unscaledVp.width, unscaledVp.height);
+    const renderScale = Math.min(baseScale * 2.0, 2200 / maxUnscaledDim);
+    const firstRenderVp = firstPage.getViewport({ scale: renderScale });
     canvas.width  = Math.round(firstRenderVp.width);
     canvas.height = Math.round(firstRenderVp.height);
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     await firstPage.render({ canvasContext: ctx, viewport: firstRenderVp }).promise;
 
-    let firstBlob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.96));
+    let firstBlob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.92));
     if (!firstBlob) {
       firstBlob = await new Promise(r => canvas.toBlob(r, 'image/png'));
     }
@@ -146,11 +155,17 @@ window.PDFEngine = {
             if (existing) continue; // Already rendered on-demand!
 
             const page     = await pdfDoc.getPage(pageNum);
-            const layoutVp = page.getViewport({ scale: 1.4 });
+            const pUnscaled = page.getViewport({ scale: 1.0 });
+            const pIsLandscape = pUnscaled.width > pUnscaled.height;
+            const pTargetW = pIsLandscape ? 1066 : 794;
+            const pBaseScale = pTargetW / pUnscaled.width;
+            const layoutVp = page.getViewport({ scale: pBaseScale });
             const pW       = Math.round(layoutVp.width);
             const pH       = Math.round(layoutVp.height);
 
-            const renderVp = page.getViewport({ scale: 2.2 });
+            const pMaxDim = Math.max(pUnscaled.width, pUnscaled.height);
+            const pRenderScale = Math.min(pBaseScale * 2.0, 2200 / pMaxDim);
+            const renderVp = page.getViewport({ scale: pRenderScale });
             canvas.width  = Math.round(renderVp.width);
             canvas.height = Math.round(renderVp.height);
             ctx.fillStyle = '#FFFFFF';
@@ -158,7 +173,7 @@ window.PDFEngine = {
 
             await page.render({ canvasContext: ctx, viewport: renderVp }).promise;
 
-            let blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.96));
+            let blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.92));
             if (!blob) {
               blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
             }

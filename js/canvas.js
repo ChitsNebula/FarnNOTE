@@ -300,6 +300,14 @@ window.CanvasEngine = class CanvasEngine {
 
 
   async loadPages(pages, storage) {
+    if (this.pageViews && this.pageViews.length) {
+      this.pageViews.forEach(v => {
+        if (v._blobUrl) {
+          try { URL.revokeObjectURL(v._blobUrl); } catch(e) {}
+        }
+      });
+    }
+
     this.pages = pages;
     this.storage = storage;
     this.pagesListContainer.innerHTML = '';
@@ -331,8 +339,8 @@ window.CanvasEngine = class CanvasEngine {
     }
 
     // Phase 2: Set up IntersectionObserver with Virtual VRAM Memory Recycling.
-    // Canvases are created when a page enters viewport and destroyed when far away (>3 pages).
-    // rootMargin 500px pre-loads ~1-2 pages above/below without thrashing on wide/landscape docs.
+    // Canvases are created when a page enters viewport and destroyed when far away (>2 pages).
+    // rootMargin 400px pre-loads ~1 page above/below without thrashing on wide/landscape docs.
     this._pageObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         const idx = parseInt(entry.target.dataset.pageIndex, 10);
@@ -346,15 +354,15 @@ window.CanvasEngine = class CanvasEngine {
         } else {
           const currentIdx = this.activePageIndex || 0;
           const distFromCurrent = Math.abs(idx - currentIdx);
-          // Recycle VRAM for pages more than 3 pages away from current scroll position
-          if (distFromCurrent > 3 && view.canvasReady) {
+          // Recycle VRAM for pages more than 2 pages away from current scroll position
+          if (distFromCurrent > 2 && view.canvasReady) {
             this._destroyPageCanvases(view);
           }
         }
       });
     }, {
       root: this.viewport,
-      rootMargin: '500px 0px 500px 0px',
+      rootMargin: '400px 0px 400px 0px',
       threshold: 0
     });
 
@@ -368,7 +376,7 @@ window.CanvasEngine = class CanvasEngine {
       let _vramGuardTimer = null;
       const _runVramGuard = () => {
         const currentIdx = this.activePageIndex || 0;
-        const keepRange = 3;
+        const keepRange = 2; // Keep active page +- 2 pages (max 5 pages active)
         const vpRect = this.viewport ? this.viewport.getBoundingClientRect() : null;
 
         this.pageViews.forEach((v, i) => {
@@ -442,14 +450,23 @@ window.CanvasEngine = class CanvasEngine {
   _createPagePlaceholder(pageData, index) {
     const width  = pageData.width  || 794;
     const height = pageData.height || 1123;
-    // Landscape pages (wider than tall) use lower DPR to prevent GPU memory exhaustion.
-    // Landscape at 1.75x is razor-sharp while cutting texture memory in half vs 3.0x.
     const isLandscape = width > height;
-    // Deliver Retina sharpness on every display: minimum 2.0x DPR
     const deviceDpr = window.devicePixelRatio || 1;
-    const dpr = isLandscape
-      ? Math.max(2.0, Math.min(2.0, deviceDpr))
-      : Math.max(2.0, Math.min(2.5, deviceDpr * 1.25));
+
+    // Cap DPR dynamically so max canvas texture dimension NEVER exceeds 2200px.
+    // This stops 4K texture explosions on large landscape slides (e.g. 1920x1080 -> 3840x2160 = 132MB/page)
+    // while guaranteeing pin-sharp Retina text rendering without GPU thrashing.
+    const maxDim = Math.max(width, height);
+    const maxAllowedDim = 2200;
+    const autoCapDpr = maxDim > 0 ? (maxAllowedDim / maxDim) : 2.0;
+
+    let dpr;
+    if (isLandscape) {
+      dpr = Math.min(autoCapDpr, Math.max(1.25, Math.min(1.75, deviceDpr)));
+    } else {
+      dpr = Math.min(autoCapDpr, Math.max(1.5, Math.min(2.0, deviceDpr * 1.25)));
+    }
+    dpr = Math.round(dpr * 100) / 100;
 
     const container = document.createElement('div');
     container.className = 'page-container';
@@ -457,7 +474,7 @@ window.CanvasEngine = class CanvasEngine {
     container.style.width  = `${width}px`;
     container.style.height = `${height}px`;
     // Show a white background so the placeholder looks like a blank page while canvas loads
-    container.style.background = '#FFFFFF';
+    container.style.backgroundColor = '#FFFFFF';
 
     const imageOverlays = document.createElement('div');
     imageOverlays.className = 'image-overlays-container';
@@ -502,22 +519,23 @@ window.CanvasEngine = class CanvasEngine {
 
     const { width, height, dpr, pageData, container } = view;
 
-    const setupCanvas = (cls) => {
+    const setupCanvas = (cls, isOpaque = false) => {
       const c = document.createElement('canvas');
       c.className = cls;
       c.width  = Math.round(width  * dpr);
       c.height = Math.round(height * dpr);
       c.style.width  = '100%';
       c.style.height = '100%';
-      const ctx = c.getContext('2d');
+      // Setting alpha: false for bgCanvas eliminates alpha blending overhead in browser compositor
+      const ctx = c.getContext('2d', { alpha: !isOpaque });
       ctx.scale(dpr, dpr);
       return { c, ctx };
     };
 
-    const { c: bgCanvas,     ctx: bgCtx     } = setupCanvas('bg-canvas');
-    const { c: strokeCanvas, ctx: strokeCtx } = setupCanvas('stroke-canvas');
-    const { c: activeCanvas, ctx: activeCtx } = setupCanvas('active-canvas');
-    const { c: uiCanvas,     ctx: uiCtx     } = setupCanvas('ui-canvas');
+    const { c: bgCanvas,     ctx: bgCtx     } = setupCanvas('bg-canvas', true);
+    const { c: strokeCanvas, ctx: strokeCtx } = setupCanvas('stroke-canvas', false);
+    const { c: activeCanvas, ctx: activeCtx } = setupCanvas('active-canvas', false);
+    const { c: uiCanvas,     ctx: uiCtx     } = setupCanvas('ui-canvas', false);
 
     // Immediately fill background canvas with solid white so there is NEVER a black flash or transparent gap
     bgCtx.save();
@@ -530,7 +548,7 @@ window.CanvasEngine = class CanvasEngine {
     container.insertBefore(strokeCanvas, view.imageOverlays);
     container.insertBefore(activeCanvas, view.imageOverlays);
     container.insertBefore(uiCanvas,     view.imageOverlays);
-    container.style.background = '#FFFFFF';
+    container.style.backgroundColor = '#FFFFFF';
 
     view.bgCanvas     = bgCanvas;
     view.strokeCanvas = strokeCanvas;
@@ -544,22 +562,31 @@ window.CanvasEngine = class CanvasEngine {
     // Draw background
     if (pageData.pdfAssetId && this.storage) {
       try {
-        const blob = await this.storage.getAsset(pageData.pdfAssetId);
+        let imgUrl = view._blobUrl;
+        if (!imgUrl) {
+          const blob = await this.storage.getAsset(pageData.pdfAssetId);
+          if (blob) {
+            imgUrl = URL.createObjectURL(blob);
+            view._blobUrl = imgUrl;
+            // Persistent CSS background shield: instant visibility when scrolling, zero white flash
+            container.style.backgroundImage = `url("${imgUrl}")`;
+            container.style.backgroundSize = '100% 100%';
+            container.style.backgroundRepeat = 'no-repeat';
+          }
+        }
+
         if (view._renderSession !== session || !view.bgCanvas) return;
 
-        if (blob) {
-          const imgUrl = URL.createObjectURL(blob);
+        if (imgUrl) {
           await new Promise((resolve) => {
             const img = new Image();
             img.onload = () => {
               if (view._renderSession === session && view.bgCtx) {
                 view.bgCtx.drawImage(img, 0, 0, width, height);
               }
-              URL.revokeObjectURL(imgUrl);
               resolve();
             };
             img.onerror = () => {
-              URL.revokeObjectURL(imgUrl);
               resolve();
             };
             img.src = imgUrl;
@@ -576,14 +603,17 @@ window.CanvasEngine = class CanvasEngine {
 
             if (pdfDoc) {
               const pdfPage = await pdfDoc.getPage(view.index + 1);
-              const renderVp = pdfPage.getViewport({ scale: 2.2 });
+              const unscaledVp = pdfPage.getViewport({ scale: 1.0 });
+              // Dynamic scale tailored to page size (prevents 2.2x overscaling on large slides)
+              const fitScale = Math.min(1.8, Math.max(1.2, (width * dpr) / unscaledVp.width));
+              const renderVp = pdfPage.getViewport({ scale: fitScale });
               const rW = Math.round(renderVp.width);
               const rH = Math.round(renderVp.height);
 
               const renderCanvas = document.createElement('canvas');
               renderCanvas.width = rW;
               renderCanvas.height = rH;
-              const rCtx = renderCanvas.getContext('2d');
+              const rCtx = renderCanvas.getContext('2d', { alpha: false });
               rCtx.fillStyle = '#FFFFFF';
               rCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
               await pdfPage.render({ canvasContext: rCtx, viewport: renderVp }).promise;
@@ -592,11 +622,19 @@ window.CanvasEngine = class CanvasEngine {
                 view.bgCtx.drawImage(renderCanvas, 0, 0, width, height);
               }
 
-              let newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/webp', 0.96));
+              let newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/webp', 0.92));
               if (!newBlob) {
                 newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/png'));
               }
-              await this.storage.saveAsset(pageData.pdfAssetId, newBlob);
+              if (newBlob) {
+                await this.storage.saveAsset(pageData.pdfAssetId, newBlob);
+                if (!view._blobUrl) {
+                  view._blobUrl = URL.createObjectURL(newBlob);
+                  container.style.backgroundImage = `url("${view._blobUrl}")`;
+                  container.style.backgroundSize = '100% 100%';
+                  container.style.backgroundRepeat = 'no-repeat';
+                }
+              }
               renderedOnDemand = true;
             }
           } catch (e) {
@@ -635,7 +673,7 @@ window.CanvasEngine = class CanvasEngine {
   }
 
   // Safely destroys canvas DOM elements and releases GPU VRAM backing store memory
-  // when a page scrolls far outside the active viewport (>3 pages away).
+  // when a page scrolls far outside the active viewport (>2 pages away).
   _destroyPageCanvases(view) {
     if (!view) return;
     view._renderSession = (view._renderSession || 0) + 1; // Invalidate any in-flight async render
@@ -647,7 +685,8 @@ window.CanvasEngine = class CanvasEngine {
     if (view.activeCanvas) { view.activeCanvas.remove(); view.activeCanvas = null; view.activeCtx = null; }
     if (view.uiCanvas)     { view.uiCanvas.remove();     view.uiCanvas = null;     view.uiCtx = null; }
 
-    view.container.style.background = '#FFFFFF'; // Restore placeholder white bg
+    // Preserve container background image so off-screen page stays seamless when scrolling back
+    view.container.style.backgroundColor = '#FFFFFF';
   }
 
   // Legacy alias kept for any internal callers (zoom, addPage, etc.)
