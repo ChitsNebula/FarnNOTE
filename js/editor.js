@@ -379,7 +379,27 @@ window.addEventListener('message', function(e) {
       }
     });
 
-    document.getElementById('btn-back-library').addEventListener('click', () => {
+    document.getElementById('btn-back-library').addEventListener('click', async () => {
+      if (this.currentNotebook && this.canvasEngine && this.canvasEngine.pageViews && this.canvasEngine.pageViews[0]) {
+        try {
+          const v0 = this.canvasEngine.pageViews[0];
+          if (v0.canvasReady && v0.bgCanvas) {
+            const thumbCanvas = document.createElement('canvas');
+            const scale = Math.min(1, 480 / Math.max(v0.width, v0.height));
+            thumbCanvas.width = Math.round(v0.width * scale);
+            thumbCanvas.height = Math.round(v0.height * scale);
+            const tCtx = thumbCanvas.getContext('2d');
+            tCtx.fillStyle = '#FFFFFF';
+            tCtx.fillRect(0, 0, thumbCanvas.width, thumbCanvas.height);
+            tCtx.drawImage(v0.bgCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+            if (v0.strokeCanvas) {
+              tCtx.drawImage(v0.strokeCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+            }
+            this.currentNotebook.coverImage = thumbCanvas.toDataURL('image/jpeg', 0.88);
+            await window.Storage.saveNotebook(this.currentNotebook);
+          }
+        } catch (err) {}
+      }
       this.app.showLibrary();
     });
 

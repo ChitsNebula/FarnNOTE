@@ -98,6 +98,20 @@ window.PDFEngine = {
     }
     await storage.saveAsset(`asset-${notebookId}-page-1`, firstBlob);
 
+    // Save Page 1 slide preview as notebook.coverImage for instant library thumbnail display
+    try {
+      const thumbScale = Math.min(1, 480 / Math.max(canvas.width, canvas.height));
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = Math.round(canvas.width * thumbScale);
+      thumbCanvas.height = Math.round(canvas.height * thumbScale);
+      const tCtx = thumbCanvas.getContext('2d');
+      tCtx.drawImage(canvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+      notebook.coverImage = thumbCanvas.toDataURL('image/jpeg', 0.88);
+      await storage.saveNotebook(notebook);
+    } catch (err) {
+      console.warn('Failed to save cover thumbnail:', err);
+    }
+
     // Create page objects for ALL pages so the notebook structure is ready instantly.
     // Use firstW and firstH so landscape PDFs are recognized as landscape from page 1 to N!
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {

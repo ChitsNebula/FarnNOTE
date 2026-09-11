@@ -196,7 +196,81 @@ window.LibraryController = class LibraryController {
       });
 
       this.grid.appendChild(card);
+      this.loadNotebookCoverPreview(card, nb);
     });
+  }
+
+  async loadNotebookCoverPreview(card, nb) {
+    const coverEl = card.querySelector('.notebook-cover');
+    if (!coverEl) return;
+
+    let previewUrl = nb.coverImage || nb._coverPreviewUrl;
+
+    // If no coverImage, check if we have page 1 asset or pages in storage
+    if (!previewUrl) {
+      try {
+        // 1. Check direct asset key: asset-[nb.id]-page-1
+        const blob = await window.Storage.getAsset(`asset-${nb.id}-page-1`);
+        if (blob) {
+          previewUrl = URL.createObjectURL(blob);
+          nb._coverPreviewUrl = previewUrl;
+        }
+      } catch (e) {}
+    }
+
+    if (!previewUrl) {
+      try {
+        // 2. Check notebook pages in IndexedDB
+        const pages = await window.Storage.getPagesForNotebook(nb.id);
+        if (pages && pages.length > 0) {
+          const firstPage = pages[0];
+          if (firstPage.pdfAssetId) {
+            const blob = await window.Storage.getAsset(firstPage.pdfAssetId);
+            if (blob) {
+              previewUrl = URL.createObjectURL(blob);
+              nb._coverPreviewUrl = previewUrl;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 3. If still no preview and it's a PDF notebook, render Page 1 on demand from raw PDF
+    if (!previewUrl && (nb.template === 'pdf' || nb.coverIcon === 'fa-file-pdf') && window.PDFEngine && window.PDFEngine.getPDFDoc) {
+      try {
+        const pdfDoc = await window.PDFEngine.getPDFDoc(nb.id, window.Storage);
+        if (pdfDoc) {
+          const page = await pdfDoc.getPage(1);
+          const vp = page.getViewport({ scale: 1.0 });
+          const c = document.createElement('canvas');
+          c.width = Math.round(vp.width);
+          c.height = Math.round(vp.height);
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, c.width, c.height);
+          await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+          previewUrl = c.toDataURL('image/jpeg', 0.85);
+          nb.coverImage = previewUrl;
+          window.Storage.saveNotebook(nb).catch(() => {});
+
+          c.toBlob(async (b) => {
+            if (b) await window.Storage.saveAsset(`asset-${nb.id}-page-1`, b);
+          }, 'image/webp', 0.95);
+        }
+      } catch (e) {}
+    }
+
+    if (previewUrl) {
+      coverEl.classList.add('has-slide-preview');
+      coverEl.innerHTML = `
+        <div class="cover-slide-wrapper">
+          <img src="${previewUrl}" class="cover-slide-img" alt="${nb.title}" loading="lazy">
+        </div>
+        ${nb.favorite ? '<i class="fa-solid fa-star fav-badge"></i>' : ''}
+        ${(nb.template === 'pdf' || nb.coverIcon === 'fa-file-pdf') ? '<div class="cover-page-badge"><i class="fa-solid fa-file-pdf"></i> PDF</div>' : ''}
+      `;
+    }
   }
 
   initEvents() {
