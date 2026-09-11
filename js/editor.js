@@ -582,7 +582,11 @@ window.addEventListener('message', function(e) {
 
         this.updateToolbarSizeDots();
         this.updateToolColorIndicators();
-        this.showToolPopover(tool, btn);
+        if (tool !== 'highlighter') {
+          this.showToolPopover(tool, btn);
+        } else {
+          this.toolPopover.classList.add('hidden');
+        }
       });
     });
 
@@ -1408,54 +1412,6 @@ window.addEventListener('message', function(e) {
           this.toolPopover.querySelectorAll('.option-chip').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
           window.ToolState.penStyle = chip.dataset.style;
-          this.resetToolPopoverAutoFade();
-        });
-      });
-
-    } else if (tool === 'highlighter') {
-      const currentSize = window.ToolState.highlighterSize || 24;
-      this.toolPopover.innerHTML = `
-        <div class="form-group" style="margin-bottom:6px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <label style="margin-bottom:0;">ขนาดปากกาไฮไลท์ (HIGHLIGHTER SIZE)</label>
-            <span id="hl-size-val" style="font-size:13px; font-weight:600; color:#FF9500;">${currentSize}px</span>
-          </div>
-          <div class="option-chips-group" style="margin-bottom:10px;">
-            <button class="option-chip ${currentSize <= 18 ? 'active' : ''}" data-size="14">บาง (14px)</button>
-            <button class="option-chip ${currentSize > 18 && currentSize <= 30 ? 'active' : ''}" data-size="24">กลาง (24px)</button>
-            <button class="option-chip ${currentSize > 30 ? 'active' : ''}" data-size="38">หนา (38px)</button>
-          </div>
-          <input type="range" id="hl-size-slider" min="6" max="60" value="${currentSize}" style="width:100%; accent-color:#FF9500; cursor:pointer;">
-        </div>
-      `;
-      this.toolPopover.classList.remove('hidden');
-
-      const slider = document.getElementById('hl-size-slider');
-      const valText = document.getElementById('hl-size-val');
-
-      if (slider) {
-        slider.addEventListener('input', (e) => {
-          const sz = parseInt(e.target.value, 10);
-          window.ToolState.highlighterSize = sz;
-          if (valText) valText.innerText = `${sz}px`;
-          this.toolPopover.querySelectorAll('.option-chip').forEach(c => {
-            const chipSize = parseInt(c.dataset.size, 10);
-            c.classList.toggle('active', Math.abs(chipSize - sz) <= 3);
-          });
-          this.updateToolbarSizeDots();
-          this.resetToolPopoverAutoFade();
-        });
-      }
-
-      this.toolPopover.querySelectorAll('.option-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-          this.toolPopover.querySelectorAll('.option-chip').forEach(c => c.classList.remove('active'));
-          chip.classList.add('active');
-          const sz = parseInt(chip.dataset.size, 10);
-          window.ToolState.highlighterSize = sz;
-          if (slider) slider.value = sz;
-          if (valText) valText.innerText = `${sz}px`;
-          this.updateToolbarSizeDots();
           this.resetToolPopoverAutoFade();
         });
       });
