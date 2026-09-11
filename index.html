@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>FarmNotes</title>
+  <link rel="icon" id="dynamic-favicon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">
+  
+  <!-- Google Fonts: Inter & Caveat for handwriting feel -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Caveat:wght@400;600;700&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- App Stylesheets -->
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/library.css">
+  <link rel="stylesheet" href="css/editor.css">
+
+  <!-- External Libraries: PDF.js & pdf-lib -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+</head>
+<body>
+  <div id="app" class="app-container">
+    
+    <!-- ==================== LIBRARY SCREEN ==================== -->
+    <section id="library-screen" class="screen active">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="brand">
+            <div class="brand-logo"><i class="fa-solid fa-wheat-awn"></i></div>
+            <span class="brand-name">FarmNotes</span>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <button class="nav-item active" data-filter="all">
+            <i class="fa-solid fa-book"></i>
+            <span>สมุดโน้ตทั้งหมด</span>
+            <span class="badge" id="count-all">0</span>
+          </button>
+          <button class="nav-item" data-filter="recent">
+            <i class="fa-solid fa-clock"></i>
+            <span>เปิดล่าสุด</span>
+          </button>
+          <button class="nav-item" data-filter="favorites">
+            <i class="fa-solid fa-star"></i>
+            <span>รายการโปรด</span>
+          </button>
+          <button class="nav-item" data-filter="trash">
+            <i class="fa-solid fa-trash-can"></i>
+            <span>ถังขยะ</span>
+          </button>
+
+          <div class="sidebar-section-divider"></div>
+          
+          <div class="sidebar-section-header">
+            <span>กลุ่ม / โฟลเดอร์</span>
+          </div>
+
+          <div id="sidebar-groups-list" class="sidebar-groups-list">
+            <!-- Dynamic Groups render here -->
+          </div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="storage-info">
+            <div class="storage-label">IndexedDB Storage</div>
+            <div class="storage-bar"><div class="storage-fill" id="storage-fill"></div></div>
+            <span id="storage-text">Local Storage Ready</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Library Content -->
+      <main class="library-content">
+        <!-- Top Navigation / Search Header -->
+        <header class="library-header">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="library-search" placeholder="ค้นหาสมุดโน้ต ข้อความ หรือเอกสาร PDF...">
+          </div>
+
+          <div class="header-actions">
+            <button class="btn-icon" id="btn-library-fullscreen" title="เต็มหน้าจอ (F11)">
+              <i class="fa-solid fa-expand" id="library-fullscreen-icon"></i>
+            </button>
+            <button class="btn-icon" id="btn-toggle-view" title="เปลี่ยนมุมมอง (Grid/List)">
+              <i class="fa-solid fa-border-all"></i>
+            </button>
+            <button class="btn-secondary" id="btn-new-group">
+              <i class="fa-solid fa-folder-plus"></i> กลุ่ม/โฟลเดอร์ใหม่
+            </button>
+            <button class="btn-primary" id="btn-new-notebook">
+              <i class="fa-solid fa-plus"></i> สมุดโน้ตใหม่
+            </button>
+            <button class="btn-secondary" id="btn-import-pdf">
+              <i class="fa-solid fa-file-arrow-up"></i> นำเข้า PDF
+            </button>
+          </div>
+        </header>
+
+        <!-- Notebook Grid Container -->
+        <div class="library-body">
+          <div class="section-title">
+            <h2 id="library-section-name">สมุดโน้ตทั้งหมด</h2>
+          </div>
+
+          <div id="notebook-grid" class="notebook-grid">
+            <!-- Notebook Cards & Folder Cards render dynamically via JS -->
+          </div>
+
+          <div id="empty-state" class="empty-state hidden">
+            <i class="fa-solid fa-book-open"></i>
+            <h3>ยังไม่มีสมุดโน้ต</h3>
+            <p>เริ่มต้นสร้างสมุดโน้ตเล่มแรก หรือ นำเข้าไฟล์ PDF เพื่อเริ่มจดบันทึก</p>
+            <button class="btn-primary" onclick="document.getElementById('btn-new-notebook').click()">
+              <i class="fa-solid fa-plus"></i> สร้างสมุดโน้ตใหม่
+            </button>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- ==================== EDITOR SCREEN ==================== -->
+    <section id="editor-screen" class="screen">
+      <!-- Top Navigation Bar -->
+      <header class="editor-header">
+        <div class="editor-header-left">
+          <button class="btn-icon" id="btn-back-library" title="กลับไปหน้าสมุดโน้ต">
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+          <div class="document-info">
+            <input type="text" id="doc-title-input" value="ไม่มีชื่อ" title="คลิกเพื่อแก้ไขชื่อสมุดโน้ต">
+            <span class="save-status" id="save-status"><i class="fa-solid fa-check"></i> บันทึกแล้ว</span>
+          </div>
+        </div>
+
+        <div class="editor-header-center">
+          <div class="history-controls">
+            <button class="btn-icon" id="btn-undo" title="ย้อนกลับ (Ctrl+Z)" disabled>
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+            <button class="btn-icon" id="btn-redo" title="ทำซ้ำ (Ctrl+Y)" disabled>
+              <i class="fa-solid fa-rotate-right"></i>
+            </button>
+          </div>
+          
+          <div class="page-indicator">
+            <button class="btn-icon-sm" id="btn-prev-page"><i class="fa-solid fa-chevron-left"></i></button>
+            <span id="page-counter-text">หน้า 1 / 1</span>
+            <button class="btn-icon-sm" id="btn-next-page"><i class="fa-solid fa-chevron-right"></i></button>
+          </div>
+
+          <button class="btn-icon" id="btn-calculator" title="เครื่องคิดเลข (Calculator)">
+            <i class="fa-solid fa-calculator"></i>
+          </button>
+          <button class="btn-icon" id="btn-camera-capture" title="ถ่ายภาพแล้วแทรกลงในโน้ตทันที (Camera Capture)">
+            <i class="fa-solid fa-camera-retro"></i>
+          </button>
+        </div>
+
+        <div class="editor-header-right">
+          <div class="zoom-controls">
+            <button class="btn-icon-sm" id="btn-zoom-out" title="ย่อขนาด"><i class="fa-solid fa-minus"></i></button>
+            <span id="zoom-level-text">100%</span>
+            <button class="btn-icon-sm" id="btn-zoom-in" title="ขยายขนาด"><i class="fa-solid fa-plus"></i></button>
+            <button class="btn-icon-sm" id="btn-zoom-reset" title="ขนาดดั้งเดิม"><i class="fa-solid fa-expand"></i></button>
+            <button class="btn-icon-sm" id="btn-fullscreen" title="เต็มหน้าจอ / ออกจากเต็มหน้าจอ (F11)">
+              <i class="fa-solid fa-maximize" id="fullscreen-icon"></i>
+            </button>
+          </div>
+
+          <button class="btn-secondary" id="btn-toggle-thumbnails" title="ดูหน้าทั้งหมด">
+            <i class="fa-solid fa-layer-group"></i> หน้าย่อย
+          </button>
+          <button class="btn-secondary" id="btn-add-page-top">
+            <i class="fa-solid fa-plus"></i> เพิ่มหน้า
+          </button>
+          <button class="btn-save-pdf" id="btn-save-pdf" title="บันทึกทับไฟล์ PDF เดิม">
+            <i class="fa-solid fa-floppy-disk"></i> บันทึก
+          </button>
+          <button class="btn-primary" id="btn-export">
+            <i class="fa-solid fa-file-export"></i> ส่งออก PDF
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Workspace Area -->
+      <div class="editor-body">
+        <aside class="editor-toolbar pos-right" id="main-toolbar">
+          <div class="tool-group">
+            <button class="tool-btn active" data-tool="pen" title="ปากกา (Pen)">
+              <i class="fa-solid fa-pen-nib"></i>
+            </button>
+            <button class="tool-btn" data-tool="highlighter" title="ปากกาไฮไลท์ (Highlighter)">
+              <i class="fa-solid fa-highlighter"></i>
+            </button>
+            <button class="tool-btn" data-tool="eraser" title="ยางลบ (Eraser)">
+              <i class="fa-solid fa-eraser"></i>
+            </button>
+            <button class="tool-btn" data-tool="shape" title="เครื่องมือรูปทรง (Shape)">
+              <i class="fa-solid fa-shapes"></i>
+            </button>
+            <button class="tool-btn" data-tool="lasso" title="เชือกบ่วงบาศก์ (Lasso Select)">
+              <i class="fa-solid fa-vector-square"></i>
+            </button>
+            <button class="tool-btn" data-tool="lens" title="Google Lens (ครอบเพื่อค้นหา)">
+              <i class="fa-solid fa-camera"></i>
+            </button>
+            <button class="tool-btn" data-tool="text" title="กล่องข้อความ (Text Box)">
+              <i class="fa-solid fa-font"></i>
+            </button>
+            <button class="tool-btn" data-tool="image" title="แทรกรูปภาพ (Insert Image)">
+              <i class="fa-solid fa-image"></i>
+            </button>
+            <button class="tool-btn" data-tool="laser" title="แสงเลเซอร์นำเสนอ (Laser Pointer)">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </button>
+          </div>
+
+          <div class="tool-divider"></div>
+
+          <div class="quick-settings">
+            <div class="color-presets" id="quick-colors">
+              <button class="color-dot active" data-color="#1C1C1E" style="background: #1C1C1E;"></button>
+              <button class="color-dot" data-color="#FF3B30" style="background: #FF3B30;"></button>
+              <button class="color-dot" data-color="#007AFF" style="background: #007AFF;"></button>
+              <button class="color-dot" data-color="#34C759" style="background: #34C759;"></button>
+              <button class="color-wheel-trigger" id="btn-custom-color" title="เลือกสีเพิ่มเติม" style="background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);"></button>
+            </div>
+
+            <div class="tool-divider-horizontal"></div>
+
+            <div class="size-presets" id="quick-sizes">
+              <button class="size-dot" data-size="2" title="เส้นบาง (2px)"><span style="width:4px;height:4px;"></span></button>
+              <button class="size-dot active" data-size="4" title="เส้นปานกลาง (4px)"><span style="width:8px;height:8px;"></span></button>
+              <button class="size-dot" data-size="8" title="เส้นหนา (8px)"><span style="width:14px;height:14px;"></span></button>
+            </div>
+
+            <div class="tool-divider-horizontal"></div>
+
+            <button class="tool-btn" id="btn-toggle-toolbar-pos" title="สลับตำแหน่งทูลบาร์ (ขวา / บน / ซ้าย)">
+              <i class="fa-solid fa-arrows-up-down-left-right"></i>
+            </button>
+          </div>
+        </aside>
+
+        <div id="tool-popover" class="tool-popover hidden"></div>
+
+        <!-- Color Wheel Popover -->
+        <div id="color-wheel-popover" class="color-wheel-popover hidden">
+          <div class="cw-header">
+            <span>เลือกสี</span>
+            <div class="cw-preview-box" id="cw-preview-box"></div>
+          </div>
+          <canvas id="color-wheel-canvas" width="200" height="200"></canvas>
+          <div class="cw-controls">
+            <label class="cw-label">ความสว่าง</label>
+            <input type="range" id="cw-brightness-slider" class="cw-slider" min="0" max="100" value="50">
+          </div>
+          <div class="cw-controls">
+            <label class="cw-label">ทึบแสง</label>
+            <input type="range" id="cw-alpha-slider" class="cw-slider" min="0" max="100" value="100">
+          </div>
+          <div class="cw-hex-row">
+            <input type="text" id="cw-hex-input" class="cw-hex-input" placeholder="#RRGGBB" maxlength="7">
+            <button class="cw-apply-btn" id="cw-apply-btn">ตกลง</button>
+          </div>
+          <div class="cw-presets">
+            <button class="cw-preset-dot" data-color="#1C1C1E" style="background:#1C1C1E"></button>
+            <button class="cw-preset-dot" data-color="#FF3B30" style="background:#FF3B30"></button>
+            <button class="cw-preset-dot" data-color="#FF9500" style="background:#FF9500"></button>
+            <button class="cw-preset-dot" data-color="#FFCC00" style="background:#FFCC00"></button>
+            <button class="cw-preset-dot" data-color="#34C759" style="background:#34C759"></button>
+            <button class="cw-preset-dot" data-color="#007AFF" style="background:#007AFF"></button>
+            <button class="cw-preset-dot" data-color="#AF52DE" style="background:#AF52DE"></button>
+            <button class="cw-preset-dot" data-color="#FFFFFF" style="background:#FFFFFF; border: 1.5px solid #ccc;"></button>
+          </div>
+        </div>
+
+        <div class="canvas-viewport" id="canvas-viewport">
+          <div class="canvas-pages-list" id="canvas-pages-list"></div>
+        </div>
+
+        <aside id="thumbnail-sidebar" class="thumbnail-sidebar hidden">
+          <div class="thumbnail-header">
+            <span>ตัวอย่างทุกหน้า</span>
+            <button class="btn-icon-sm" id="btn-close-thumbnails"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="thumbnail-list" id="thumbnail-list"></div>
+          <div class="thumbnail-footer">
+            <button class="btn-secondary full-width" id="btn-add-page-thumb">
+              <i class="fa-solid fa-plus"></i> เพิ่มหน้าใหม่
+            </button>
+        </aside>
+      </div>
+
+
+    </section>
+
+    <!-- ==================== MODALS & DIALOGS ==================== -->
+    
+    <!-- 1. New Notebook Modal -->
+    <div id="modal-new-notebook" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>สร้างสมุดโน้ตใหม่</h3>
+          <button class="btn-icon-sm close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="modal-body modal-grid">
+          <!-- Left: Live Preview -->
+          <div class="notebook-preview-area">
+            <div class="preview-notebook-card" id="modal-cover-preview">
+              <div class="preview-cover-band" id="modal-cover-band"></div>
+              <div class="preview-cover-icon" id="modal-cover-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+              <div class="preview-cover-title" id="modal-cover-title-text">สมุดโน้ตไม่มีชื่อ</div>
+            </div>
+          </div>
+
+          <!-- Right: Customization Controls -->
+          <div class="notebook-form-area">
+            <div class="form-group">
+              <label>ชื่อสมุดโน้ต</label>
+              <input type="text" id="new-notebook-title" value="สมุดโน้ตของฉัน" placeholder="กรอกชื่อสมุดโน้ต...">
+            </div>
+
+            <div class="form-group">
+              <label>จัดเข้ากลุ่ม / โฟลเดอร์</label>
+              <select id="new-notebook-group">
+                <option value="">-- ไม่จัดเข้ากลุ่ม (ทั่วไป) --</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>ภาพปกสมุดแบบกำหนดเอง (Custom Cover Image)</label>
+              <button type="button" class="btn-secondary full-width" id="btn-upload-cover-img">
+                <i class="fa-solid fa-image"></i> เลือกรูปภาพทำเป็นปกสมุด
+              </button>
+            </div>
+
+            <div class="form-group">
+              <label>สีปกสมุดมาตรฐาน</label>
+              <div class="color-grid" id="cover-color-options">
+                <button class="color-chip active" data-color="#FF9500" style="background:#FF9500;"></button>
+                <button class="color-chip" data-color="#007AFF" style="background:#007AFF;"></button>
+                <button class="color-chip" data-color="#34C759" style="background:#34C759;"></button>
+                <button class="color-chip" data-color="#AF52DE" style="background:#AF52DE;"></button>
+                <button class="color-chip" data-color="#FF2D55" style="background:#FF2D55;"></button>
+                <button class="color-chip" data-color="#5856D6" style="background:#5856D6;"></button>
+                <button class="color-chip" data-color="#1C1C1E" style="background:#1C1C1E;"></button>
+                <button class="color-chip" data-color="#8E8E93" style="background:#8E8E93;"></button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>ไอคอนหน้าปก</label>
+              <div class="icon-grid" id="cover-icon-options">
+                <button class="icon-chip active" data-icon="fa-graduation-cap"><i class="fa-solid fa-graduation-cap"></i></button>
+                <button class="icon-chip" data-icon="fa-calculator"><i class="fa-solid fa-calculator"></i></button>
+                <button class="icon-chip" data-icon="fa-flask"><i class="fa-solid fa-flask"></i></button>
+                <button class="icon-chip" data-icon="fa-language"><i class="fa-solid fa-language"></i></button>
+                <button class="icon-chip" data-icon="fa-code"><i class="fa-solid fa-code"></i></button>
+                <button class="icon-chip" data-icon="fa-pen-ruler"><i class="fa-solid fa-pen-ruler"></i></button>
+                <button class="icon-chip" data-icon="fa-lightbulb"><i class="fa-solid fa-lightbulb"></i></button>
+                <button class="icon-chip" data-icon="fa-heart"><i class="fa-solid fa-heart"></i></button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>ทิศทางกระดาษ (Page Orientation)</label>
+              <div class="option-chips-group" id="new-notebook-orientation">
+                <button type="button" class="option-chip active" data-orientation="portrait"><i class="fa-solid fa-file"></i> แนวตั้ง (Portrait)</button>
+                <button type="button" class="option-chip" data-orientation="landscape"><i class="fa-solid fa-file-powerpoint"></i> แนวนอน (Landscape)</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>รูปแบบกระดาษ (Page Template)</label>
+              <select id="new-notebook-template">
+                <option value="lined">กระดาษมีเส้น (Lined Paper)</option>
+                <option value="grid">กระดาษตาราง (Square Grid)</option>
+                <option value="dotted">กระดาษจุด (Dotted Grid)</option>
+                <option value="blank">กระดาษเปล่า (Blank White)</option>
+                <option value="cornell">กระดาษจดสรุป (Cornell Notes)</option>
+                <option value="dark-grid">กระดาษสีเข้มตาราง (Dark Grid)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-secondary close-modal">ยกเลิก</button>
+          <button class="btn-primary" id="btn-submit-create-notebook">สร้างสมุดโน้ต</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Sleek Custom Context Popover Menu (Replaces Browser Default Dialogs!) -->
+    <div id="notebook-context-menu" class="context-popover hidden">
+      <button class="context-item" id="ctx-fav"><i class="fa-solid fa-star"></i> <span>สลับรายการโปรด</span></button>
+      <button class="context-item" id="ctx-cover"><i class="fa-solid fa-image"></i> <span>เปลี่ยนรูปภาพปกสมุด</span></button>
+      <button class="context-item" id="ctx-group"><i class="fa-solid fa-folder-tree"></i> <span>จัดเข้ากลุ่ม / โฟลเดอร์</span></button>
+      <button class="context-item" id="ctx-rename"><i class="fa-solid fa-pen-to-square"></i> <span>เปลี่ยนชื่อสมุดโน้ต</span></button>
+      <button class="context-item" id="ctx-duplicate"><i class="fa-solid fa-copy"></i> <span>คัดลอกสมุดโน้ต</span></button>
+      <div class="context-divider"></div>
+      <button class="context-item danger" id="ctx-delete"><i class="fa-solid fa-trash-can"></i> <span>ลบสมุดโน้ต</span></button>
+    </div>
+
+    <!-- 3. Sleek Custom Modal Dialog for Confirm / Prompt (NO 'This page says'!) -->
+    <div id="modal-custom-dialog" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-sm">
+        <div class="modal-header">
+          <h3 id="custom-dialog-title">ยืนยันทำรายการ</h3>
+          <button class="btn-icon-sm close-custom-dialog"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <p id="custom-dialog-message">คุณแน่ใจหรือไม่?</p>
+          <div id="custom-dialog-input-container" class="form-group hidden" style="margin-top:12px;">
+            <input type="text" id="custom-dialog-input" placeholder="กรอกข้อมูล...">
+          </div>
+          <div id="custom-dialog-select-container" class="form-group hidden" style="margin-top:12px;">
+            <select id="custom-dialog-select"></select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="btn-custom-dialog-cancel">ยกเลิก</button>
+          <button class="btn-primary" id="btn-custom-dialog-confirm">ตกลง</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. GoodNotes Grid Page Overview Modal -->
+    <div id="modal-page-overview" class="modal-backdrop hidden">
+      <div class="modal-card page-overview-modal-card">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-layer-group" style="color:var(--gn-orange); margin-right:8px;"></i> หน้าย่อยทั้งหมด (PAGE OVERVIEW)</h3>
+          <div class="header-action-group">
+            <button class="btn-primary-sm" id="btn-overview-add-page">
+              <i class="fa-solid fa-plus"></i> เพิ่มหน้าใหม่
+            </button>
+            <button class="btn-icon-sm close-modal" id="btn-close-overview"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+        <div class="modal-body page-overview-grid-container">
+          <div class="page-overview-grid" id="page-overview-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Camera Photo & Direct Insert Modal -->
+    <div id="camera-modal" class="modal-backdrop hidden">
+      <div class="modal-card camera-modal-card">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-camera-retro" style="color:var(--gn-orange); margin-right:8px;"></i> ถ่ายภาพและแทรกลงในโน้ต (CAMERA CAPTURE)</h3>
+          <button class="btn-icon-sm close-modal" id="btn-close-camera"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body camera-modal-body">
+          <div class="camera-preview-container">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <canvas id="camera-snapshot-canvas" style="display:none;"></canvas>
+          </div>
+        </div>
+        <div class="modal-footer camera-modal-footer">
+          <button class="btn-secondary" id="btn-camera-switch" title="สลับกล้อง หน้า/หลัง">
+            <i class="fa-solid fa-camera-rotate"></i> สลับกล้อง
+          </button>
+          <button class="btn-primary camera-shutter-btn" id="btn-camera-shutter">
+            <i class="fa-solid fa-camera"></i> 📸 ถ่ายภาพและครอบตัดทันที
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CROP IMAGE MODAL (ระบบครอบตัดรูปภาพอัจฉริยะ) -->
+    <div id="crop-image-modal" class="modal-backdrop hidden" style="z-index: 10005;">
+      <div class="modal-card crop-modal-card">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-scissors" style="color:var(--gn-orange); margin-right:8px;"></i> ครอบตัดรูปภาพ (CROP IMAGE)</h3>
+          <button class="btn-icon-sm close-modal" id="btn-close-crop"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div class="modal-body crop-modal-body">
+          <!-- Crop Canvas Workspace -->
+          <div class="crop-workspace-container" id="crop-workspace">
+            <canvas id="crop-canvas"></canvas>
+          </div>
+
+          <!-- Crop Toolbar Options -->
+          <div class="crop-toolbar">
+            <div class="crop-tool-section">
+              <span class="crop-tool-label">อัตราส่วน:</span>
+              <div class="crop-ratio-group">
+                <button class="crop-ratio-btn active" data-ratio="free">🔓 อิสระ</button>
+                <button class="crop-ratio-btn" data-ratio="1:1">1:1</button>
+                <button class="crop-ratio-btn" data-ratio="4:3">4:3</button>
+                <button class="crop-ratio-btn" data-ratio="16:9">16:9</button>
+                <button class="crop-ratio-btn" data-ratio="3:4">3:4</button>
+              </div>
+            </div>
+
+            <div class="crop-action-group">
+              <button class="btn-secondary" id="btn-crop-rotate" title="หมุนภาพ 90 องศา">
+                <i class="fa-solid fa-rotate-right"></i> หมุน 90°
+              </button>
+              <button class="btn-secondary" id="btn-crop-reset" title="รีเซ็ตกรอบครอบตัด">
+                <i class="fa-solid fa-rotate-left"></i> รีเซ็ต
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer crop-modal-footer">
+          <button class="btn-secondary close-modal" id="btn-cancel-crop">ยกเลิก</button>
+          <button class="btn-primary crop-apply-btn" id="btn-apply-crop">
+            <i class="fa-solid fa-check"></i> ✅ ยืนยันครอบตัดและแทรก
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Scientific Calculator Widget (เครื่องคิดเลขวิทยาศาสตร์) -->
+    <div id="calculator-widget" class="calculator-widget sci-widget hidden">
+      <div class="calc-header" id="calc-drag-handle">
+        <div class="calc-title">
+          <i class="fa-solid fa-calculator"></i> เครื่องคิดเลข
+          <span class="calc-mode-badge" id="calc-mode-indicator">DEG</span>
+          <span class="calc-mode-badge" id="calc-sci-mode" style="display:none; background:#34C759; color:#FFF; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:4px;">SCI</span>
+        </div>
+        <div class="calc-header-actions">
+          <button class="calc-icon-btn active" id="btn-calc-dock" title="สลับโหมดแบ่งหน้าจอฝั่งขวา / ลอยอิสระ"><i class="fa-solid fa-table-columns"></i></button>
+          <button class="calc-icon-btn" id="btn-calc-copy" title="คัดลอกผลลัพธ์"><i class="fa-regular fa-copy"></i></button>
+          <button class="calc-icon-btn" id="btn-calc-insert" title="แทรกลงในโน้ต"><i class="fa-solid fa-file-import"></i></button>
+          <button class="calc-icon-btn" id="btn-calc-close" title="ปิด"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+
+      <div class="calc-segmented-header">
+        <div class="calc-segmented-control">
+          <button class="calc-tab active" id="tab-calc"><i class="fa-solid fa-calculator"></i> เครื่องคิดเลข</button>
+          <button class="calc-tab" id="tab-converter"><i class="fa-solid fa-right-left"></i> แปลงหน่วย</button>
+        </div>
+      </div>
+
+      <div id="calc-body-wrapper">
+        <div class="calc-display-area">
+          <div class="calc-history" id="calc-history"></div>
+          <div class="calc-input" id="calc-input">0</div>
+        </div>
+      </div>
+
+      <!-- Unit Converter Panel -->
+      <div class="unit-converter-panel hidden" id="unit-converter-panel">
+        <select id="unit-category-select" class="unit-select-category" style="display:none;">
+          <option value="length">📏 ความยาว</option>
+          <option value="mass">⚖️ มวล/น้ำหนัก</option>
+          <option value="temp">🌡️ อุณหภูมิ</option>
+          <option value="area">📐 พื้นที่ (ไร่-งาน-วา)</option>
+          <option value="volume">🧪 ปริมาตร</option>
+          <option value="data">💾 ข้อมูล</option>
+          <option value="time">⏱️ เวลา</option>
+        </select>
+
+        <div class="unit-convert-col">
+          <div class="unit-input-group">
+            <label>จาก (FROM)</label>
+            <div class="unit-field-row">
+              <input type="number" id="unit-from-val" class="unit-num-input" value="1" placeholder="0">
+              <select id="unit-from-select" class="unit-select"></select>
+            </div>
+          </div>
+
+          <div class="unit-swap-wrapper">
+            <button class="unit-swap-btn" id="btn-unit-swap" title="สลับหน่วย"><i class="fa-solid fa-arrow-down-up"></i> สลับหน่วย</button>
+          </div>
+
+          <div class="unit-input-group">
+            <label>เป็น (TO)</label>
+            <div class="unit-field-row">
+              <input type="text" id="unit-to-val" class="unit-num-input readonly-target" readonly value="0">
+              <select id="unit-to-select" class="unit-select"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="unit-cat-section">
+          <div class="unit-cat-label">ประเภทหน่วย (CATEGORY)</div>
+          <div class="unit-cat-grid" id="unit-cat-grid">
+            <button class="unit-cat-chip active" data-cat="length">📏 ความยาว</button>
+            <button class="unit-cat-chip" data-cat="mass">⚖️ น้ำหนัก</button>
+            <button class="unit-cat-chip" data-cat="temp">🌡️ อุณหภูมิ</button>
+            <button class="unit-cat-chip" data-cat="area">📐 พื้นที่/ไร่</button>
+            <button class="unit-cat-chip" data-cat="volume">🧪 ปริมาตร</button>
+            <button class="unit-cat-chip" data-cat="data">💾 ข้อมูล</button>
+            <button class="unit-cat-chip" data-cat="time">⏱️ เวลา</button>
+          </div>
+        </div>
+
+        <div class="unit-actions-row">
+          <button class="unit-action-btn" id="btn-unit-copy"><i class="fa-regular fa-copy"></i> คัดลอกผลลัพธ์</button>
+          <button class="unit-action-btn primary" id="btn-unit-insert"><i class="fa-solid fa-file-import"></i> แทรกลงในโน้ต</button>
+        </div>
+      </div>
+
+      <div class="calc-keypad sci-keypad-8">
+        <!-- Row 1: Sci Mode & Basic Functions / AC, Backspace, %, ÷ -->
+        <button class="calc-btn btn-sci-toggle" id="btn-calc-shift">2nd</button>
+        <button class="calc-btn btn-sci-toggle" id="btn-calc-deg">DEG</button>
+        <button class="calc-btn btn-sci" data-insert="(">(</button>
+        <button class="calc-btn btn-sci" data-insert=")">)</button>
+        <button class="calc-btn btn-func" data-action="clear">AC</button>
+        <button class="calc-btn btn-func" data-action="backspace"><i class="fa-solid fa-backspace"></i></button>
+        <button class="calc-btn btn-func" data-action="percent">%</button>
+        <button class="calc-btn btn-op" data-action="divide">÷</button>
+
+        <!-- Row 2: Trig & Numpad 7, 8, 9, × -->
+        <button class="calc-btn btn-sci" data-fn="sin" data-shift-fn="asin">sin</button>
+        <button class="calc-btn btn-sci" data-fn="cos" data-shift-fn="acos">cos</button>
+        <button class="calc-btn btn-sci" data-fn="tan" data-shift-fn="atan">tan</button>
+        <button class="calc-btn btn-sci" data-insert="^">x<sup>y</sup></button>
+        <button class="calc-btn btn-num" data-val="7">7</button>
+        <button class="calc-btn btn-num" data-val="8">8</button>
+        <button class="calc-btn btn-num" data-val="9">9</button>
+        <button class="calc-btn btn-op" data-action="multiply">×</button>
+
+        <!-- Row 3: Log, Roots & Numpad 4, 5, 6, − -->
+        <button class="calc-btn btn-sci" data-fn="log" data-shift-fn="tenx">log</button>
+        <button class="calc-btn btn-sci" data-fn="ln" data-shift-fn="expx">ln</button>
+        <button class="calc-btn btn-sci" data-fn="sqrt" data-shift-fn="yroot">√</button>
+        <button class="calc-btn btn-sci" data-fn="sqr" data-shift-fn="cube">x<sup>2</sup></button>
+        <button class="calc-btn btn-num" data-val="4">4</button>
+        <button class="calc-btn btn-num" data-val="5">5</button>
+        <button class="calc-btn btn-num" data-val="6">6</button>
+        <button class="calc-btn btn-op" data-action="subtract">−</button>
+
+        <!-- Row 4: Constants, Factorial & Numpad 1, 2, 3, + -->
+        <button class="calc-btn btn-sci" data-insert="π">π</button>
+        <button class="calc-btn btn-sci" data-insert="e">e</button>
+        <button class="calc-btn btn-sci" data-fn="fact">x!</button>
+        <button class="calc-btn btn-sci" data-fn="inv">1/x</button>
+        <button class="calc-btn btn-num" data-val="1">1</button>
+        <button class="calc-btn btn-num" data-val="2">2</button>
+        <button class="calc-btn btn-num" data-val="3">3</button>
+        <button class="calc-btn btn-op" data-action="add">+</button>
+
+        <!-- Row 5: Sign, ANS, SCI & Numpad 0, ., = -->
+        <button class="calc-btn btn-sci" data-action="toggle-sign">±</button>
+        <button class="calc-btn btn-sci" data-insert="ANS">ANS</button>
+        <button class="calc-btn btn-sci-toggle" id="btn-calc-sci" data-action="sci">SCI</button>
+        <div class="sci-spacer border-right-sep"></div>
+        <button class="calc-btn btn-num btn-zero" data-val="0">0</button>
+        <button class="calc-btn btn-num" data-val=".">.</button>
+        <button class="calc-btn btn-equals" data-action="equals">=</button>
+      </div>
+    </div>
+
+    <!-- Hidden File Inputs -->
+
+    <input type="file" id="pdf-file-input" accept="application/pdf" style="display:none;">
+    <input type="file" id="image-file-input" accept="image/*" style="display:none;">
+    <input type="file" id="cover-image-file-input" accept="image/*" style="display:none;">
+
+  </div>
+
+  <!-- Standard Application Scripts (No module / Works on file:// protocol!) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="js/tools.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/canvas.js"></script>
+  <script src="js/pdf.js"></script>
+  <script src="js/library.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
