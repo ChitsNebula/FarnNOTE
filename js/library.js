@@ -393,7 +393,7 @@ window.LibraryController = class LibraryController {
               for (const r of regs) await r.unregister();
             }
           } catch (e) {}
-          localStorage.setItem('farmnotes_app_version', '2.5.0');
+          localStorage.setItem('farmnotes_app_version', '2.6.0');
           if (window.CustomDialog && window.CustomDialog.toast) {
             window.CustomDialog.toast('ล้างแคชและอัปเดตเวอร์ชันล่าสุดสำเร็จ! กำลังรีโหลด...', 2500);
           }
