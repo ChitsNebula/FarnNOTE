@@ -1,0 +1,78 @@
+// FarmNotes Service Worker — Network-First with Offline Cache Fallback
+const CACHE_NAME = 'farmnotes-cache-v1';
+const STATIC_ASSETS = [
+  './',
+  './index.html',
+  'css/reset.css',
+  'css/theme.css',
+  'css/library.css',
+  'css/editor.css',
+  'js/tools.js',
+  'js/storage.js',
+  'js/canvas.js',
+  'js/pdf.js',
+  'js/library.js',
+  'js/editor.js',
+  'js/app.js',
+  'icon-192.png',
+  'icon-512.png',
+  'manifest.json'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(STATIC_ASSETS).catch((err) => {
+        console.warn('Some assets could not be precached:', err);
+      });
+    })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  // Only intercept GET requests on http/https
+  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
+    return;
+  }
+
+  // Network-first for application files so updates reflect immediately
+  event.respondWith(
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const resClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, resClone);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        // Fallback to cache when offline
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          if (event.request.mode === 'navigate') {
+            return caches.match('./index.html');
+          }
+        });
+      })
+  );
+});
