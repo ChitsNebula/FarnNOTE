@@ -392,27 +392,54 @@ window.CustomDialog = {
       if (els.inputCont) els.inputCont.classList.add('hidden');
       if (els.selectCont) els.selectCont.classList.add('hidden');
       if (els.btnCancel) els.btnCancel.classList.remove('hidden');
-      if (els.btnConfirm) els.btnConfirm.innerText = 'ตกลง';
-      if (els.btnCancel) els.btnCancel.innerText = 'ยกเลิก';
+
+      // Purge prior event listeners by cloning button nodes
+      const btnConfirm = els.btnConfirm.cloneNode(true);
+      btnConfirm.innerText = 'ตกลง';
+      els.btnConfirm.replaceWith(btnConfirm);
+
+      const btnCancel = els.btnCancel.cloneNode(true);
+      btnCancel.innerText = 'ยกเลิก';
+      els.btnCancel.replaceWith(btnCancel);
+
+      const btnClose = els.btnClose ? els.btnClose.cloneNode(true) : null;
+      if (els.btnClose && btnClose) els.btnClose.replaceWith(btnClose);
 
       els.modal.classList.remove('hidden');
 
-      const cleanup = (result) => {
+      let done = false;
+      const finish = (result) => {
+        if (done) return;
+        done = true;
         els.modal.classList.add('hidden');
-        if (els.btnConfirm) els.btnConfirm.removeEventListener('click', onOk);
-        if (els.btnCancel) els.btnCancel.removeEventListener('click', onCancel);
-        if (els.btnClose) els.btnClose.removeEventListener('click', onCancel);
         els.modal.removeEventListener('click', onBackdrop);
         resolve(result);
       };
 
-      const onOk = (e) => { e.stopPropagation(); cleanup(true); };
-      const onCancel = (e) => { e.stopPropagation(); cleanup(false); };
-      const onBackdrop = (e) => { if (e.target === els.modal) cleanup(false); };
+      const onBackdrop = (e) => {
+        if (e.target === els.modal) finish(false);
+      };
 
-      if (els.btnConfirm) els.btnConfirm.addEventListener('click', onOk);
-      if (els.btnCancel) els.btnCancel.addEventListener('click', onCancel);
-      if (els.btnClose) els.btnClose.addEventListener('click', onCancel);
+      btnConfirm.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(true);
+      });
+
+      btnCancel.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(false);
+      });
+
+      if (btnClose) {
+        btnClose.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(false);
+        });
+      }
+
       els.modal.addEventListener('click', onBackdrop);
     });
   },
@@ -431,24 +458,44 @@ window.CustomDialog = {
       if (els.inputCont) els.inputCont.classList.add('hidden');
       if (els.selectCont) els.selectCont.classList.add('hidden');
       if (els.btnCancel) els.btnCancel.classList.add('hidden');
-      if (els.btnConfirm) els.btnConfirm.innerText = 'ตกลง';
+
+      const btnConfirm = els.btnConfirm.cloneNode(true);
+      btnConfirm.innerText = 'ตกลง';
+      els.btnConfirm.replaceWith(btnConfirm);
+
+      const btnClose = els.btnClose ? els.btnClose.cloneNode(true) : null;
+      if (els.btnClose && btnClose) els.btnClose.replaceWith(btnClose);
 
       els.modal.classList.remove('hidden');
 
-      const cleanup = () => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
         els.modal.classList.add('hidden');
-        if (els.btnCancel) els.btnCancel.classList.remove('hidden');
-        if (els.btnConfirm) els.btnConfirm.removeEventListener('click', onOk);
-        if (els.btnClose) els.btnClose.removeEventListener('click', onOk);
+        els.btnCancel.classList.remove('hidden');
         els.modal.removeEventListener('click', onBackdrop);
         resolve();
       };
 
-      const onOk = (e) => { e.stopPropagation(); cleanup(); };
-      const onBackdrop = (e) => { if (e.target === els.modal) cleanup(); };
+      const onBackdrop = (e) => {
+        if (e.target === els.modal) finish();
+      };
 
-      if (els.btnConfirm) els.btnConfirm.addEventListener('click', onOk);
-      if (els.btnClose) els.btnClose.addEventListener('click', onOk);
+      btnConfirm.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        finish();
+      });
+
+      if (btnClose) {
+        btnClose.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          finish();
+        });
+      }
+
       els.modal.addEventListener('click', onBackdrop);
     });
   },

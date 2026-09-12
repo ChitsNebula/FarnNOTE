@@ -166,6 +166,28 @@ window.Storage = {
     });
   },
 
+  async deletePage(id) {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('pages', 'readwrite');
+      const store = tx.objectStore('pages');
+      const request = store.delete(id);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  async deleteAsset(id) {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('assets', 'readwrite');
+      const store = tx.objectStore('assets');
+      const request = store.delete(id);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
   async saveAsset(id, blobData) {
     const db = await getDB();
     return new Promise((resolve, reject) => {
