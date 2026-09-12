@@ -357,6 +357,70 @@ window.LibraryController = class LibraryController {
       updateLibFsIcon();
     }
 
+    // ── Check for Updates ────────────────────────────────────────────────────
+    const btnCheckUpdate = document.getElementById('btn-check-update');
+    const updateIcon = document.getElementById('update-btn-icon');
+    if (btnCheckUpdate) {
+      btnCheckUpdate.addEventListener('click', async () => {
+        if (!window.location.protocol.startsWith('http')) {
+          if (window.CustomDialog && window.CustomDialog.alert) {
+            window.CustomDialog.alert(
+              'ตรวจหาการอัปเดต',
+              'ขณะนี้คุณเปิดแอปแบบไฟล์เครื่อง (file://)\n\nหากต้องการอัปเดตเป็นเวอร์ชันล่าสุด เพียงดับเบิลคลิกไฟล์ update.bat ในโฟลเดอร์ FarmNotes ได้ทันทีโดยไม่ต้องดาวน์โหลดใหม่ครับ'
+            );
+          } else {
+            alert('คุณกำลังเปิดแบบไฟล์เครื่อง (file://)\nดับเบิลคลิกไฟล์ update.bat ในโฟลเดอร์เพื่ออัปเดตได้ทันทีครับ');
+          }
+          return;
+        }
+
+        if (updateIcon) updateIcon.classList.add('fa-spin');
+        btnCheckUpdate.disabled = true;
+
+        if (window.CustomDialog && window.CustomDialog.toast) {
+          window.CustomDialog.toast('กำลังตรวจหาอัปเดตเวอร์ชันใหม่...');
+        }
+
+        try {
+          const res = await fetch('/api/update');
+          const data = await res.json();
+          if (data.success) {
+            if (data.upToDate) {
+              if (window.CustomDialog && window.CustomDialog.toast) {
+                window.CustomDialog.toast('ระบบของคุณเป็นเวอร์ชันล่าสุดแล้ว! ✨');
+              }
+            } else {
+              if (window.CustomDialog && window.CustomDialog.toast) {
+                window.CustomDialog.toast('อัปเดตเวอร์ชันใหม่เรียบร้อย! กำลังรีโหลดหน้าเว็บ...', 3000);
+              }
+              setTimeout(() => {
+                window.location.reload();
+              }, 1200);
+            }
+          } else {
+            if (window.CustomDialog && window.CustomDialog.alert) {
+              window.CustomDialog.alert('การอัปเดตไม่สำเร็จ', data.error || 'ไม่สามารถติดต่อเซิร์ฟเวอร์หรือดึงข้อมูลจาก GitHub ได้');
+            } else {
+              alert('การอัปเดตไม่สำเร็จ: ' + (data.error || 'เกิดข้อผิดพลาด'));
+            }
+          }
+        } catch (err) {
+          console.error('Update check failed:', err);
+          if (window.CustomDialog && window.CustomDialog.alert) {
+            window.CustomDialog.alert(
+              'ไม่สามารถอัปเดตได้',
+              'ไม่สามารถเรียก API อัปเดตได้ (เซิร์ฟเวอร์อาจไม่ได้เปิดด้วย server.py)\n\nคุณสามารถดับเบิลคลิกไฟล์ update.bat ในโฟลเดอร์ FarmNotes เพื่ออัปเดตแทนได้ทันทีครับ'
+            );
+          } else {
+            alert('ไม่สามารถอัปเดตได้: ดับเบิลคลิกไฟล์ update.bat ในโฟลเดอร์ FarmNotes แทนได้ครับ');
+          }
+        } finally {
+          if (updateIcon) updateIcon.classList.remove('fa-spin');
+          btnCheckUpdate.disabled = false;
+        }
+      });
+    }
+
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => b.classList.remove('active'));

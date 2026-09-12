@@ -1,6 +1,12 @@
 @chcp 65001 >nul
 @echo off
 title FarmNotes Web - Local Server & Cloudflare Tunnel
+cd /d "%~dp0"
+echo ========================================================
+echo [FarmNotes Web] Checking & pulling latest version from GitHub...
+echo ========================================================
+git pull origin main
+echo.
 echo ========================================================
 echo [FarmNotes Web] Starting Local Server (Port 8080)...
 echo ========================================================
