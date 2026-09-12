@@ -362,3 +362,133 @@ window.isStrokeInLasso = function(stroke, lassoPoints) {
   }
   return false;
 };
+
+// ── Global Custom Modal Dialog & Toast System (File Protocol Compatible) ─────
+window.CustomDialog = {
+  _getElements() {
+    const modal = document.getElementById('modal-custom-dialog');
+    const title = document.getElementById('custom-dialog-title');
+    const message = document.getElementById('custom-dialog-message');
+    const inputCont = document.getElementById('custom-dialog-input-container');
+    const input = document.getElementById('custom-dialog-input');
+    const selectCont = document.getElementById('custom-dialog-select-container');
+    const select = document.getElementById('custom-dialog-select');
+    const btnCancel = document.getElementById('btn-custom-dialog-cancel');
+    const btnConfirm = document.getElementById('btn-custom-dialog-confirm');
+    const btnClose = modal ? modal.querySelector('.close-custom-dialog') : null;
+    return { modal, title, message, inputCont, input, selectCont, select, btnCancel, btnConfirm, btnClose };
+  },
+
+  confirm(titleText, messageText) {
+    return new Promise((resolve) => {
+      const els = this._getElements();
+      if (!els.modal) {
+        resolve(window.confirm(messageText || titleText));
+        return;
+      }
+
+      els.title.innerText = titleText || 'ยืนยันทำรายการ';
+      els.message.innerText = messageText || '';
+      if (els.inputCont) els.inputCont.classList.add('hidden');
+      if (els.selectCont) els.selectCont.classList.add('hidden');
+      if (els.btnCancel) els.btnCancel.classList.remove('hidden');
+      if (els.btnConfirm) els.btnConfirm.innerText = 'ตกลง';
+      if (els.btnCancel) els.btnCancel.innerText = 'ยกเลิก';
+
+      els.modal.classList.remove('hidden');
+
+      const cleanup = (result) => {
+        els.modal.classList.add('hidden');
+        if (els.btnConfirm) els.btnConfirm.removeEventListener('click', onOk);
+        if (els.btnCancel) els.btnCancel.removeEventListener('click', onCancel);
+        if (els.btnClose) els.btnClose.removeEventListener('click', onCancel);
+        els.modal.removeEventListener('click', onBackdrop);
+        resolve(result);
+      };
+
+      const onOk = (e) => { e.stopPropagation(); cleanup(true); };
+      const onCancel = (e) => { e.stopPropagation(); cleanup(false); };
+      const onBackdrop = (e) => { if (e.target === els.modal) cleanup(false); };
+
+      if (els.btnConfirm) els.btnConfirm.addEventListener('click', onOk);
+      if (els.btnCancel) els.btnCancel.addEventListener('click', onCancel);
+      if (els.btnClose) els.btnClose.addEventListener('click', onCancel);
+      els.modal.addEventListener('click', onBackdrop);
+    });
+  },
+
+  alert(titleText, messageText) {
+    return new Promise((resolve) => {
+      const els = this._getElements();
+      if (!els.modal) {
+        window.alert(messageText || titleText);
+        resolve();
+        return;
+      }
+
+      els.title.innerText = titleText || 'แจ้งเตือน';
+      els.message.innerText = messageText || '';
+      if (els.inputCont) els.inputCont.classList.add('hidden');
+      if (els.selectCont) els.selectCont.classList.add('hidden');
+      if (els.btnCancel) els.btnCancel.classList.add('hidden');
+      if (els.btnConfirm) els.btnConfirm.innerText = 'ตกลง';
+
+      els.modal.classList.remove('hidden');
+
+      const cleanup = () => {
+        els.modal.classList.add('hidden');
+        if (els.btnCancel) els.btnCancel.classList.remove('hidden');
+        if (els.btnConfirm) els.btnConfirm.removeEventListener('click', onOk);
+        if (els.btnClose) els.btnClose.removeEventListener('click', onOk);
+        els.modal.removeEventListener('click', onBackdrop);
+        resolve();
+      };
+
+      const onOk = (e) => { e.stopPropagation(); cleanup(); };
+      const onBackdrop = (e) => { if (e.target === els.modal) cleanup(); };
+
+      if (els.btnConfirm) els.btnConfirm.addEventListener('click', onOk);
+      if (els.btnClose) els.btnClose.addEventListener('click', onOk);
+      els.modal.addEventListener('click', onBackdrop);
+    });
+  },
+
+  toast(message, duration = 2200) {
+    let toast = document.getElementById('app-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'app-toast';
+      toast.style.cssText = `
+        position: fixed;
+        bottom: 32px;
+        left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        background: rgba(28, 28, 30, 0.94);
+        color: #FFFFFF;
+        padding: 10px 22px;
+        border-radius: 24px;
+        font-size: 13.5px;
+        font-weight: 500;
+        box-shadow: 0 8px 26px rgba(0,0,0,0.28);
+        z-index: 300050;
+        opacity: 0;
+        transition: all 0.25s ease-out;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      `;
+      document.body.appendChild(toast);
+    }
+
+    toast.innerText = message;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+
+    if (toast._timer) clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(-50%) translateY(20px)';
+    }, duration);
+  }
+};

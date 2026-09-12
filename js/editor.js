@@ -1753,29 +1753,73 @@ window.addEventListener('message', function(e) {
     this.pages.forEach((p, idx) => p.index = idx);
 
     await window.Storage.savePage(clonedPage);
+    for (let i = 0; i < this.pages.length; i++) {
+      await window.Storage.savePage(this.pages[i]);
+    }
+
+    if (this.currentNotebook) {
+      this.currentNotebook.pageCount = this.pages.length;
+      await window.Storage.saveNotebook(this.currentNotebook);
+    }
+
     await this.canvasEngine.loadPages(this.pages, window.Storage);
+    this.updatePageCounter();
     this.renderPageOverviewGrid();
     this.autoSave();
+
+    if (window.CustomDialog && window.CustomDialog.toast) {
+      window.CustomDialog.toast(`คัดลอกหน้า ${pageIndex + 1} แล้ว`);
+    }
   }
 
   async deletePageAtIndex(pageIndex) {
     if (this.pages.length <= 1) {
-      if (window.CustomDialog) {
-        window.CustomDialog.alert('ไม่สามารถลบได้', 'สมุดโน้ตต้องมีอย่างน้อย 1 หน้า');
+      if (window.CustomDialog && window.CustomDialog.alert) {
+        await window.CustomDialog.alert('ไม่สามารถลบได้', 'สมุดโน้ตต้องมีอย่างน้อย 1 หน้า');
+      } else {
+        alert('สมุดโน้ตต้องมีอย่างน้อย 1 หน้า');
       }
       return;
     }
 
-    const confirmed = await window.CustomDialog.confirm('ยืนยันลบหน้า', `คุณแน่ใจหรือไม่ว่าต้องการลบ หน้า ${pageIndex + 1}?`);
+    let confirmed = false;
+    if (window.CustomDialog && window.CustomDialog.confirm) {
+      confirmed = await window.CustomDialog.confirm('ยืนยันลบหน้า', `คุณแน่ใจหรือไม่ว่าต้องการลบ หน้า ${pageIndex + 1}?`);
+    } else {
+      confirmed = confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ หน้า ${pageIndex + 1}?`);
+    }
     if (!confirmed) return;
 
     const deleted = this.pages.splice(pageIndex, 1)[0];
-    await window.Storage.deletePage(deleted.id);
+    if (deleted && deleted.id) {
+      await window.Storage.deletePage(deleted.id);
+      if (deleted.pdfAssetId) {
+        try { await window.Storage.deleteAsset(deleted.pdfAssetId); } catch(e) {}
+      }
+    }
 
     this.pages.forEach((p, idx) => p.index = idx);
+    for (let i = 0; i < this.pages.length; i++) {
+      await window.Storage.savePage(this.pages[i]);
+    }
+
+    if (this.currentNotebook) {
+      this.currentNotebook.pageCount = this.pages.length;
+      await window.Storage.saveNotebook(this.currentNotebook);
+    }
+
+    if (this.currentPageIndex >= this.pages.length) {
+      this.currentPageIndex = Math.max(0, this.pages.length - 1);
+    }
+
     await this.canvasEngine.loadPages(this.pages, window.Storage);
+    this.updatePageCounter();
     this.renderPageOverviewGrid();
     this.autoSave();
+
+    if (window.CustomDialog && window.CustomDialog.toast) {
+      window.CustomDialog.toast(`ลบหน้า ${pageIndex + 1} เรียบร้อย`);
+    }
   }
 
   renderThumbnails() {

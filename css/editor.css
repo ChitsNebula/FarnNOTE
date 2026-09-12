@@ -1182,6 +1182,14 @@
   background: #FFE5E5;
 }
 
+#modal-custom-dialog {
+  z-index: 200050 !important;
+}
+.modal-card-sm {
+  width: 380px !important;
+  max-width: 90vw !important;
+}
+
 /* ── Embedded Resizable Google Lens Side Panel (In-App Drawer) ──────────────── */
 .google-lens-drawer {
   position: absolute;
