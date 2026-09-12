@@ -21,23 +21,23 @@
       background: white;
       border-radius: 20px;
       box-shadow: 0 12px 36px rgba(0,0,0,0.09);
-      max-width: 580px;
+      max-width: 620px;
       width: 100%;
-      padding: 36px;
+      padding: 32px;
       box-sizing: border-box;
     }
     h1 {
-      font-size: 24px;
+      font-size: 22px;
       margin-top: 0;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       text-align: center;
     }
     .subtitle {
       color: #636366;
-      font-size: 15px;
-      line-height: 1.6;
+      font-size: 14px;
+      line-height: 1.5;
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
     .badge {
       display: inline-block;
@@ -59,8 +59,8 @@
     }
     .alert-box {
       border-radius: 12px;
-      padding: 18px;
-      margin-bottom: 24px;
+      padding: 16px;
+      margin-bottom: 20px;
       font-size: 14px;
       line-height: 1.6;
     }
@@ -78,23 +78,26 @@
       background: #007AFF;
       color: white;
       border: none;
-      padding: 16px 28px;
-      font-size: 16px;
+      padding: 12px 20px;
+      font-size: 15px;
       font-weight: 600;
-      border-radius: 12px;
+      border-radius: 10px;
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 10px;
-      width: 100%;
+      gap: 8px;
       transition: all 0.2s;
       box-sizing: border-box;
       text-decoration: none;
     }
     .btn:hover {
       background: #0056b3;
-      transform: translateY(-1px);
+    }
+    .btn-block {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
     }
     .btn-green {
       background: #34C759;
@@ -102,75 +105,67 @@
     .btn-green:hover {
       background: #28a745;
     }
-    .notebook-list {
+    .btn-done {
+      background: #8E8E93 !important;
+      color: white;
+    }
+    .part-card {
       background: #F8F9FA;
-      border: 1px solid #E9ECEF;
+      border: 1px solid #E5E5EA;
       border-radius: 12px;
-      max-height: 220px;
-      overflow-y: auto;
-      padding: 12px;
-      margin: 16px 0;
+      padding: 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .part-info {
+      flex: 1;
       text-align: left;
     }
-    .notebook-item {
-      padding: 8px 12px;
-      border-bottom: 1px solid #E9ECEF;
-      font-size: 14px;
-      display: flex;
-      justify-content: space-between;
+    .part-title {
+      font-weight: 700;
+      font-size: 15px;
+      color: #1C1C1E;
+      margin-bottom: 4px;
     }
-    .notebook-item:last-child {
-      border-bottom: none;
-    }
-    .step-num {
-      background: #007AFF;
-      color: white;
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+    .part-desc {
       font-size: 12px;
-      font-weight: bold;
-      margin-right: 6px;
+      color: #636366;
+      line-height: 1.4;
     }
   </style>
 </head>
 <body>
   <div class="card">
-    <div style="text-align: center; font-size: 44px; margin-bottom: 10px;">📦</div>
+    <div style="text-align: center; font-size: 40px; margin-bottom: 8px;">📦</div>
     <h1>เครื่องมือดึงสมุดโน้ตเดิม (Export Tool)</h1>
-    <div class="subtitle">ระบบกู้คืนและย้ายสมุดโน้ตเดิมทั้งหมดไปยังเว็บแอปใหม่</div>
+    <div class="subtitle">ระบบกู้คืนและย้ายสมุดโน้ตเดิมไปยังเว็บแอปใหม่อย่างปลอดภัย (ป้องกันเครื่องค้าง)</div>
 
     <!-- Mode 1: Opened on Web (https://) -->
     <div id="section-web" style="display: none;">
       <div style="text-align: center;">
-        <span class="badge badge-web">⚠️ กำลังเปิดบนหน้าเว็บออนไลน์ (ยังไม่สามารถอ่านไฟล์ในเครื่องได้)</span>
+        <span class="badge badge-web">⚠️ เปิดบนหน้าเว็บออนไลน์ (ยังไม่สามารถอ่านไฟล์ในเครื่องได้)</span>
       </div>
       <div class="alert-box alert-warning">
-        <b>💡 ทำไมถึงต้องทำขั้นตอนนี้?</b><br>
-        สมุดโน้ตเดิม 30 เล่มของคุณถูกเก็บอยู่ในเครื่อง Chromebook<br>
-        หน้าเว็บออนไลน์ไม่สามารถเข้าไปอ่านข้อมูลในเครื่องได้โดยตรง จึงต้องดาวน์โหลดไฟล์เครื่องมือนี้ไปเปิดในเครื่องก่อนครับ
+        <b>💡 ทำไมถึงต้องดาวน์โหลดไฟล์นี้ก่อน?</b><br>
+        สมุดโน้ต 30 เล่มของคุณอยู่ในเครื่อง Chromebook หน้าเว็บจึงต้องให้คุณดาวน์โหลดไฟล์เครื่องมือนี้ไปเปิดในโฟลเดอร์เดียวกับสมุดของคุณครับ
       </div>
 
       <div style="margin-bottom: 20px;">
-        <p style="font-size: 15px; font-weight: 600; margin-bottom: 10px;">
-          <span class="step-num">1</span> คลิกปุ่มด้านล่างเพื่อดาวน์โหลดไฟล์นี้ลงเครื่อง:
-        </p>
-        <button id="btn-download-tool" class="btn">
-          📥 ดาวน์โหลดไฟล์ export.html ลงเครื่อง (คลิกที่นี่)
+        <button id="btn-download-tool" class="btn btn-block">
+          📥 1. คลิกที่นี่เพื่อดาวน์โหลดไฟล์ export.html ลงเครื่อง
         </button>
       </div>
 
       <div class="alert-box" style="background: #F0F7FF; border: 1px solid #BEE5EB; color: #0C5460;">
-        <p style="margin: 0 0 8px 0; font-weight: 600;">
-          <span class="step-num">2</span> พอโหลดเสร็จแล้ว:
-        </p>
+        <b>2. พอโหลดเสร็จแล้ว:</b><br>
         1. เปิดแอป <b>ไฟล์ (Files)</b> ใน Chromebook<br>
-        2. ไปที่โฟลเดอร์ <b>ดาวน์โหลด (Downloads)</b><br>
-        3. ดับเบิลคลิกเปิดไฟล์ <b>export.html</b> ที่เพิ่งดาวน์โหลดมา<br>
-        4. จะมีปุ่มให้กดดึงสมุดทั้ง 30 เล่มออกมาทันที!
+        2. ลากไฟล์ <code>export.html</code> ไปไว้ในโฟลเดอร์:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<code>Downloads/FarmNotes-20260912T.../FarmNotes</code><br>
+        3. ดับเบิลคลิกเปิด <code>export.html</code> จากในโฟลเดอร์นั้น<br>
+        4. จะมีปุ่มให้กดดาวน์โหลดสมุดแต่ละส่วนทันทีโดยเครื่องไม่ค้างแน่นอน!
       </div>
     </div>
 
@@ -181,7 +176,7 @@
       </div>
 
       <div id="loading-box" style="text-align: center; padding: 20px; color: #636366;">
-        กำลังค้นหาสมุดโน้ตและเอกสารในเครื่องของคุณ...
+        กำลังค้นหาสมุดโน้ตในเครื่อง...
       </div>
 
       <div id="result-box" style="display: none;">
@@ -189,19 +184,18 @@
           <b>ตรวจพบสมุดโน้ตในเครื่องของคุณ!</b>
         </div>
 
-        <div class="notebook-list" id="nb-list"></div>
+        <p style="font-size: 13px; color: #636366; margin-bottom: 12px; text-align: left;">
+          💡 <i>เพื่อป้องกันหน่วยความจำล้น (SIGILL) ระบบได้แบ่งสมุดออกเป็นส่วนละ 5 เล่ม ให้คุณกดดาวน์โหลดทีละส่วนได้เลยครับ:</i>
+        </p>
 
-        <button id="btn-export-now" class="btn btn-green">
-          💾 ดาวน์โหลดไฟล์สำรองข้อมูล (ดึงสมุดทั้งหมด)
-        </button>
+        <!-- Container for part download cards -->
+        <div id="parts-container"></div>
 
-        <div id="export-status" style="margin-top: 14px; text-align: center; font-weight: 600; font-size: 14px; color: #34C759;"></div>
-
-        <div class="alert-box" style="background: #F0F7FF; border: 1px solid #BEE5EB; color: #0C5460; margin-top: 20px;">
-          <b>ขั้นตอนสุดท้ายหลังจากกดดาวน์โหลด:</b><br>
+        <div class="alert-box" style="background: #F0F7FF; border: 1px solid #BEE5EB; color: #0C5460; margin-top: 16px;">
+          <b>ขั้นตอนนำเข้าเว็บใหม่:</b><br>
           1. สลับไปที่เว็บใหม่ <b>https://chitsnebula.github.io/FarnNOTE/</b><br>
-          2. กดปุ่มก้อนเมฆ <b>☁️⬆️</b> (แถบขวาบน)<br>
-          3. เลือกไฟล์สำรองข้อมูลที่เพิ่งโหลดมา แล้วสมุดทั้งหมดจะกลับมาทันที!
+          2. กดปุ่มก้อนเมฆ <b>☁️⬆️</b> แล้วเลือกไฟล์ส่วนที่ดาวน์โหลดมา<br>
+          3. ทยอยกดนำเข้าทีละส่วนจนครบ สมุดทั้งหมดจะมาครบ 100% ครับ!
         </div>
       </div>
     </div>
@@ -213,11 +207,8 @@
     const sectionFile = document.getElementById('section-file');
 
     if (!isFile) {
-      // Running on Web
       sectionWeb.style.display = 'block';
-
       document.getElementById('btn-download-tool').addEventListener('click', () => {
-        // Fetch current page HTML and trigger download as export.html
         const html = document.documentElement.outerHTML;
         const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -230,31 +221,30 @@
         setTimeout(() => URL.revokeObjectURL(url), 2000);
       });
     } else {
-      // Running on Local File
       sectionFile.style.display = 'block';
       scanNotebooks();
     }
 
     let foundNotebooks = [];
     let foundPages = [];
-    let foundAssets = [];
+    let dbInstance = null;
 
     async function scanNotebooks() {
       const loadingBox = document.getElementById('loading-box');
       const resultBox = document.getElementById('result-box');
       const banner = document.getElementById('detected-banner');
-      const listEl = document.getElementById('nb-list');
+      const partsContainer = document.getElementById('parts-container');
 
       try {
-        const db = await new Promise((resolve, reject) => {
+        dbInstance = await new Promise((resolve, reject) => {
           const req = indexedDB.open('GoodNotesWebDB', 1);
           req.onsuccess = () => resolve(req.result);
           req.onerror = () => reject(req.error);
         });
 
         const getAll = (storeName) => new Promise((resolve, reject) => {
-          if (!db.objectStoreNames.contains(storeName)) return resolve([]);
-          const tx = db.transaction(storeName, 'readonly');
+          if (!dbInstance.objectStoreNames.contains(storeName)) return resolve([]);
+          const tx = dbInstance.transaction(storeName, 'readonly');
           const req = tx.objectStore(storeName).getAll();
           req.onsuccess = () => resolve(req.result || []);
           req.onerror = () => reject(req.error);
@@ -262,108 +252,132 @@
 
         foundNotebooks = await getAll('notebooks');
         foundPages = await getAll('pages');
-        foundAssets = await getAll('assets');
 
         loadingBox.style.display = 'none';
         resultBox.style.display = 'block';
 
         if (foundNotebooks.length === 0) {
           banner.className = 'alert-box alert-warning';
-          banner.innerHTML = '<b>ไม่พบสมุดโน้ตในที่อยู่นี้</b><br>โปรดนำไฟล์ <code>export.html</code> ไปวางไว้ในโฟลเดอร์เดียวกับ <code>index.html</code> เดิมของคุณ';
-          document.getElementById('btn-export-now').disabled = true;
+          banner.innerHTML = '<b>ไม่พบสมุดโน้ตในโฟลเดอร์นี้</b><br>โปรดนำไฟล์ <code>export.html</code> ไปวางไว้ในโฟลเดอร์เดียวกับ <code>index.html</code> เดิมของคุณ';
           return;
         }
 
-        banner.innerHTML = `🎉 <b>ตรวจพบสมุดโน้ตทั้งหมด ${foundNotebooks.length} เล่ม (${foundPages.length} หน้า)!</b>`;
-        listEl.innerHTML = foundNotebooks.map((nb, i) => `
-          <div class="notebook-item">
-            <span><b>${i + 1}.</b> 📘 ${nb.title || 'ไม่มีชื่อ'}</span>
-            <span style="color: #8E8E93;">${nb.pageCount || 1} หน้า</span>
-          </div>
-        `).join('');
+        banner.innerHTML = `🎉 <b>ตรวจพบสมุดโน้ตทั้งหมด ${foundNotebooks.length} เล่ม!</b>`;
+
+        const CHUNK_SIZE = 5;
+        const totalChunks = Math.ceil(foundNotebooks.length / CHUNK_SIZE);
+        partsContainer.innerHTML = '';
+
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = foundNotebooks.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+          const titles = chunk.map(n => n.title || 'ไม่มีชื่อ').join(', ');
+          const partNum = i + 1;
+
+          const card = document.createElement('div');
+          card.className = 'part-card';
+          card.innerHTML = `
+            <div class="part-info">
+              <div class="part-title">📦 ส่วนที่ ${partNum} / ${totalChunks} (${chunk.length} เล่ม)</div>
+              <div class="part-desc">${titles}</div>
+            </div>
+            <button class="btn btn-green btn-download-part" id="btn-part-${partNum}">
+              📥 ดาวน์โหลด
+            </button>
+          `;
+
+          const btnPart = card.querySelector(`#btn-part-${partNum}`);
+          btnPart.addEventListener('click', async () => {
+            await downloadPart(chunk, partNum, totalChunks, btnPart);
+          });
+
+          partsContainer.appendChild(card);
+        }
 
       } catch (err) {
         loadingBox.innerText = 'เกิดข้อผิดพลาดในการอ่านฐานข้อมูล: ' + err.message;
       }
     }
 
-    document.getElementById('btn-export-now').addEventListener('click', async () => {
-      const btn = document.getElementById('btn-export-now');
-      const status = document.getElementById('export-status');
-      btn.disabled = true;
+    async function getAsset(id) {
+      if (!dbInstance) return null;
+      return new Promise((resolve) => {
+        try {
+          const tx = dbInstance.transaction('assets', 'readonly');
+          const req = tx.objectStore('assets').get(id);
+          req.onsuccess = () => resolve(req.result ? req.result.data : null);
+          req.onerror = () => resolve(null);
+        } catch(e) {
+          resolve(null);
+        }
+      });
+    }
 
-      const CHUNK_SIZE = 5;
-      const totalChunks = Math.ceil(foundNotebooks.length / CHUNK_SIZE);
+    async function downloadPart(chunkNotebooks, partNum, totalChunks, btnElement) {
+      btnElement.disabled = true;
+      btnElement.innerText = '⏳ กำลังแพ็ค...';
 
       try {
-        const groups = JSON.parse(localStorage.getItem('farmnotes_groups') || '[]');
+        const chunkIds = new Set(chunkNotebooks.map(n => n.id));
+        const chunkPages = foundPages.filter(p => chunkIds.has(p.notebookId));
 
-        for (let i = 0; i < totalChunks; i++) {
-          const chunk = foundNotebooks.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-          const chunkIds = new Set(chunk.map(n => n.id));
-          const chunkPages = foundPages.filter(p => chunkIds.has(p.notebookId));
-
-          const neededAssetIds = new Set();
-          for (const nb of chunk) {
-            neededAssetIds.add(`asset-${nb.id}-raw-pdf`);
-            neededAssetIds.add(`asset-${nb.id}-page-1`);
-          }
-          for (const page of chunkPages) {
-            if (page.pdfAssetId) neededAssetIds.add(page.pdfAssetId);
-          }
-
-          btn.innerText = `⏳ กำลังรวบรวมไฟล์ส่วนที่ ${i + 1}/${totalChunks}...`;
-
-          const assets = [];
-          for (const a of foundAssets) {
-            if (!neededAssetIds.has(a.id)) continue;
-            let dataUrl = a.data;
-            if (a.data instanceof Blob) {
-              dataUrl = await new Promise((resolve) => {
-                const fr = new FileReader();
-                fr.onloadend = () => resolve(fr.result);
-                fr.readAsDataURL(a.data);
-              });
-            }
-            assets.push({ id: a.id, data: dataUrl });
-          }
-
-          const backup = {
-            app: 'FarmNotes',
-            version: 1,
-            exportedAt: new Date().toISOString(),
-            part: `Part${i + 1}_of_${totalChunks}`,
-            groups,
-            notebooks: chunk,
-            pages: chunkPages,
-            assets
-          };
-
-          const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          const dateStr = new Date().toISOString().slice(0, 10);
-          a.href = url;
-          a.download = `FarmNotes_Backup_Part${i + 1}_of_${totalChunks}_${dateStr}.farmnotes`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(url), 2000);
-
-          if (i < totalChunks - 1) {
-            await new Promise(r => setTimeout(r, 1200));
-          }
+        const neededAssetIds = new Set();
+        for (const nb of chunkNotebooks) {
+          neededAssetIds.add(`asset-${nb.id}-raw-pdf`);
+          neededAssetIds.add(`asset-${nb.id}-page-1`);
+        }
+        for (const page of chunkPages) {
+          if (page.pdfAssetId) neededAssetIds.add(page.pdfAssetId);
         }
 
-        btn.innerText = '✅ ดาวน์โหลดไฟล์สำรองครบทุกส่วนแล้ว!';
-        status.innerText = `ดาวน์โหลดสำเร็จทั้งหมด ${totalChunks} ไฟล์ (รวม ${foundNotebooks.length} เล่ม)`;
+        // Fetch assets individually to keep RAM strictly under 20-30MB!
+        const assets = [];
+        for (const assetId of neededAssetIds) {
+          const blobData = await getAsset(assetId);
+          if (!blobData) continue;
+          let dataUrl = blobData;
+          if (blobData instanceof Blob) {
+            dataUrl = await new Promise((resolve) => {
+              const fr = new FileReader();
+              fr.onloadend = () => resolve(fr.result);
+              fr.readAsDataURL(blobData);
+            });
+          }
+          assets.push({ id: assetId, data: dataUrl });
+        }
+
+        const backup = {
+          app: 'FarmNotes',
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          part: `Part${partNum}_of_${totalChunks}`,
+          groups: JSON.parse(localStorage.getItem('farmnotes_groups') || '[]'),
+          notebooks: chunkNotebooks,
+          pages: chunkPages,
+          assets
+        };
+
+        const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = `FarmNotes_Backup_Part${partNum}_of_${totalChunks}_${dateStr}.farmnotes`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+        btnElement.disabled = false;
+        btnElement.className = 'btn btn-done';
+        btnElement.innerText = `✅ โหลดแล้ว (ส่วนที่ ${partNum})`;
+
       } catch (err) {
-        btn.disabled = false;
-        btn.innerText = 'ลองใหม่อีกครั้ง';
-        status.innerText = 'เกิดข้อผิดพลาด: ' + err.message;
-        status.style.color = '#FF3B30';
+        btnElement.disabled = false;
+        btnElement.className = 'btn btn-green';
+        btnElement.innerText = 'ลองใหม่';
+        alert('เกิดข้อผิดพลาด: ' + err.message);
       }
-    });
+    }
   </script>
 </body>
 </html>

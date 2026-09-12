@@ -357,20 +357,24 @@ window.Storage = {
       if (page.pdfAssetId) neededAssetIds.add(page.pdfAssetId);
     }
 
-    // 3. Assets for this batch only
-    const rawAssets = await getAllFromStore('assets');
+    // 3. Fetch only needed assets individually to avoid high RAM / SIGILL crash
     const assets = [];
-    for (const a of rawAssets) {
-      if (!neededAssetIds.has(a.id)) continue;
-      let dataUrl = a.data;
-      if (a.data instanceof Blob) {
-        dataUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(a.data);
-        });
+    for (const assetId of neededAssetIds) {
+      try {
+        const blobData = await this.getAsset(assetId);
+        if (!blobData) continue;
+        let dataUrl = blobData;
+        if (blobData instanceof Blob) {
+          dataUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blobData);
+          });
+        }
+        assets.push({ id: assetId, data: dataUrl });
+      } catch (e) {
+        console.warn('Skip asset:', assetId, e);
       }
-      assets.push({ id: a.id, data: dataUrl });
     }
 
     const backupData = {
