@@ -274,25 +274,59 @@ window.EditorController = class EditorController {
       newTab.document.open();
       newTab.document.write(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>กำลังส่งรูปไปยัง Google Lens...</title>
-<style>body{margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#f8f9fa;color:#202124;}
-.spinner{width:40px;height:40px;border:4px solid #e8eaed;border-top-color:#4285f4;border-radius:50%;animation:spin 0.8s linear infinite;margin:16px auto;}
-@keyframes spin{to{transform:rotate(360deg);}}</style></head>
-<body><div class="spinner"></div><p>กำลังเปิด Google Lens...</p>
-<form id="f" method="POST" action="https://www.google.com/searchbyimage/upload" enctype="multipart/form-data" style="display:none">
-<input type="file" id="fi" name="encoded_image"></form>
-<script>
-window.addEventListener('message', function(e) {
-  if (!e.data || !e.data.buffer) return;
-  var blob = new Blob([e.data.buffer], { type: 'image/png' });
-  var file = new File([blob], 'selection.png', { type: 'image/png' });
-  var dt = new DataTransfer(); dt.items.add(file);
-  document.getElementById('fi').files = dt.files;
-  document.getElementById('f').submit();
-});
-</script></body></html>`);
+<style>body{margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#202124;color:#e8eaed;text-align:center;padding:20px;box-sizing:border-box;}
+.spinner{width:40px;height:40px;border:4px solid #3c4043;border-top-color:#8ab4f8;border-radius:50%;animation:spin 0.8s linear infinite;margin:16px auto;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.btn-fb{display:none;margin-top:20px;padding:12px 24px;background:#8ab4f8;color:#202124;border-radius:8px;text-decoration:none;font-weight:600;}
+</style></head>
+<body><div class="spinner" id="sp"></div><p id="msg">กำลังเปิด Google Lens...</p>
+<a id="fb" class="btn-fb" href="https://images.google.com">🔍 เปิด Google Images (คัดลอกรูปแล้ว กด Ctrl+V ได้เลย)</a>
+</body></html>`);
       newTab.document.close();
-      const buffer = await this.lastLensBlob.arrayBuffer();
-      setTimeout(() => newTab.postMessage({ type: 'lens-image', buffer }, '*', [buffer]), 100);
+
+      // Copy to clipboard
+      try {
+        if (navigator.clipboard && window.ClipboardItem) {
+          navigator.clipboard.write([new ClipboardItem({ 'image/png': this.lastLensBlob })]).catch(() => {});
+        }
+      } catch (e) {}
+
+      let uploadedUrl = null;
+      try {
+        const fd = new FormData();
+        fd.append('reqtype', 'fileupload');
+        fd.append('time', '1h');
+        fd.append('fileToUpload', this.lastLensBlob, 'lens.png');
+        const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: fd });
+        if (res.ok) {
+          const txt = (await res.text()).trim();
+          if (txt.startsWith('http')) uploadedUrl = txt;
+        }
+      } catch (e) {}
+
+      if (!uploadedUrl) {
+        try {
+          const fd = new FormData();
+          fd.append('file', this.lastLensBlob, 'lens.png');
+          const res = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: fd });
+          if (res.ok) {
+            const json = await res.json();
+            if (json && json.data && json.data.url) {
+              uploadedUrl = json.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (uploadedUrl) {
+        newTab.location.replace(`https://lens.google.com/uploadbyurl?url=${encodeURIComponent(uploadedUrl)}`);
+      } else {
+        try {
+          newTab.document.getElementById('sp').style.display = 'none';
+          newTab.document.getElementById('msg').innerHTML = '📋 คัดลอกรูปภาพแล้ว! กดปุ่มด้านล่างเพื่อเปิด Google Images แล้วกด <b>Ctrl + V</b> เพื่อค้นหาทันที';
+          newTab.document.getElementById('fb').style.display = 'inline-block';
+        } catch (e) {}
+      }
     };
 
     if (btnOpen) {
@@ -353,7 +387,7 @@ window.addEventListener('message', function(e) {
       .then(json => {
         if (json && json.data && json.data.url) {
           const imgUrl = json.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-          this.lastLensUrl = `https://www.google.com/searchbyimage?image_url=${encodeURIComponent(imgUrl)}`;
+          this.lastLensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imgUrl)}`;
         }
       }).catch(err => {});
 

@@ -2697,7 +2697,7 @@ window.CanvasEngine = class CanvasEngine {
   // ── Google Lens Search ──────────────────────────────────────────────────────
   // Captures the crop area, copies to clipboard, opens a new tab,
   // and auto-submits a multipart form POST to https://www.google.com/searchbyimage/upload
-  // which redirects straight to Google Visual Search / Lens results without 403 errors.
+  // ── Google Lens Search via modern lens.google.com/uploadbyurl ─────────────
   async searchWithGoogleLens(view) {
     const box = this.lensCropBox || this.selectionBox;
     if (!box || !view) return;
@@ -2725,81 +2725,111 @@ window.CanvasEngine = class CanvasEngine {
       );
     }
 
-    tmp.toBlob((blob) => {
+    tmp.toBlob(async (blob) => {
       if (!blob) return;
 
-      // Open in a new tab (_blank)
-      const lensWindow = window.open('', '_blank');
+      // Copy image to clipboard for instant Ctrl+V convenience
+      try {
+        if (navigator.clipboard && window.ClipboardItem) {
+          navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).catch(() => {});
+        }
+      } catch (e) {}
 
+      // Open new tab synchronously to bypass popup blocker
+      const lensWindow = window.open('', '_blank');
       if (!lensWindow) {
         alert('กรุณาอนุญาต Pop-up หรือแท็บใหม่ในเบราว์เซอร์เพื่อแสดงผล Google Lens');
         return;
       }
 
-      // 3. Submit cropped image form POST directly to Google Lens!
       lensWindow.document.open();
       lensWindow.document.write(`<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <title>Google Lens — ผลการค้นหาภาพถ่าย</title>
+  <title>Google Lens — กำลังประมวลผลรูปภาพ...</title>
   <style>
     body { margin: 0; display: flex; flex-direction: column; align-items: center;
            justify-content: center; height: 100vh; font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-           background: #202124; color: #e8eaed; }
-    .logo { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
+           background: #202124; color: #e8eaed; text-align: center; padding: 20px; box-sizing: border-box; }
+    .logo { font-size: 32px; font-weight: 700; margin-bottom: 16px; }
     .logo .g { color: #4285f4; }
     .logo .o1 { color: #ea4335; }
     .logo .o2 { color: #fbbc05; }
     .logo .g2 { color: #4285f4; }
     .logo .l { color: #34a853; }
     .logo .e { color: #ea4335; }
-    p { font-size: 14px; color: #9aa0a6; margin-top: 8px; }
-    .spinner { width: 34px; height: 34px; border: 3px solid #3c4043;
+    p { font-size: 15px; color: #9aa0a6; margin-top: 10px; line-height: 1.5; }
+    .spinner { width: 38px; height: 38px; border: 3px solid #3c4043;
                border-top-color: #8ab4f8; border-radius: 50%;
-               animation: spin 0.8s linear infinite; margin: 12px auto; }
+               animation: spin 0.8s linear infinite; margin: 16px auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .btn-fallback { display: none; margin-top: 20px; padding: 12px 24px; background: #8ab4f8;
+                    color: #202124; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; }
   </style>
 </head>
 <body>
   <div class="logo">
     <span class="g">G</span><span class="o1">o</span><span class="o2">o</span><span class="g2">g</span><span class="l">l</span><span class="e">e</span> Lens
   </div>
-  <div class="spinner"></div>
-  <p>กำลังค้นหาภาพถ่ายด้วย Google Lens…</p>
-  <form id="lens-form" method="POST"
-        action="https://www.google.com/searchbyimage/upload"
-        enctype="multipart/form-data" style="display:none">
-    <input type="file" id="lens-file" name="encoded_image" accept="image/*">
-  </form>
-  <script>
-    window.addEventListener('message', function(e) {
-      if (!e.data || e.data.type !== 'lens-image') return;
-      try {
-        var blob = new Blob([e.data.buffer], { type: 'image/png' });
-        var file = new File([blob], 'selection.png', { type: 'image/png' });
-        var dt   = new DataTransfer();
-        dt.items.add(file);
-        document.getElementById('lens-file').files = dt.files;
-        document.getElementById('lens-form').submit();
-      } catch(err) {
-        document.querySelector('p').textContent = 'เกิดข้อผิดพลาด: ' + err.message;
-      }
-    });
-  </script>
+  <div class="spinner" id="spin"></div>
+  <p id="msg">กำลังส่งรูปภาพไปยัง Google Lens…</p>
+  <a id="btn-fb" class="btn-fallback" href="https://images.google.com" target="_self">🔍 เปิด Google Images (คัดลอกรูปแล้ว กด Ctrl+V ได้เลย)</a>
 </body>
 </html>`);
       lensWindow.document.close();
 
-      // 4. Send image buffer to popup window
-      blob.arrayBuffer().then((buffer) => {
-        const send = () => {
-          try {
-            lensWindow.postMessage({ type: 'lens-image', buffer }, '*');
-          } catch (err) {}
-        };
-        setTimeout(send, 100);
-      });
+      // Upload image to temporary host and redirect to modern lens.google.com/uploadbyurl
+      let uploadedUrl = null;
+
+      // Provider 1: Litterbox (catbox.moe, temporary 1h)
+      try {
+        const fd = new FormData();
+        fd.append('reqtype', 'fileupload');
+        fd.append('time', '1h');
+        fd.append('fileToUpload', blob, 'lens.png');
+        const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
+          method: 'POST',
+          body: fd
+        });
+        if (res.ok) {
+          const txt = (await res.text()).trim();
+          if (txt.startsWith('http')) uploadedUrl = txt;
+        }
+      } catch (e) {}
+
+      // Provider 2: tmpfiles.org
+      if (!uploadedUrl) {
+        try {
+          const fd = new FormData();
+          fd.append('file', blob, 'lens.png');
+          const res = await fetch('https://tmpfiles.org/api/v1/upload', {
+            method: 'POST',
+            body: fd
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json && json.data && json.data.url) {
+              uploadedUrl = json.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (uploadedUrl) {
+        const targetLensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(uploadedUrl)}`;
+        lensWindow.location.replace(targetLensUrl);
+      } else {
+        // Fallback: Show manual paste option
+        try {
+          const msgEl = lensWindow.document.getElementById('msg');
+          const spinEl = lensWindow.document.getElementById('spin');
+          const fbBtn = lensWindow.document.getElementById('btn-fb');
+          if (spinEl) spinEl.style.display = 'none';
+          if (msgEl) msgEl.innerHTML = '📋 ระบบได้คัดลอกรูปภาพลงคลิปบอร์ดของคุณเรียบร้อยแล้ว!<br>กดปุ่มด้านล่างเพื่อเปิด Google Images แล้วกด <b>Ctrl + V</b> เพื่อค้นหาภาพได้ทันที';
+          if (fbBtn) fbBtn.style.display = 'inline-block';
+        } catch (e) {}
+      }
 
       // Clear crop box overlay on canvas
       this.lensCropBox = null;
