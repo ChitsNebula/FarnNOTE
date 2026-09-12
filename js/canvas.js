@@ -2694,9 +2694,6 @@ window.CanvasEngine = class CanvasEngine {
   }
 
 
-  // ── Google Lens Search ──────────────────────────────────────────────────────
-  // Captures the crop area, copies to clipboard, opens a new tab,
-  // and auto-submits a multipart form POST to https://www.google.com/searchbyimage/upload
   // ── Google Lens Search via modern lens.google.com/uploadbyurl ─────────────
   async searchWithGoogleLens(view) {
     const box = this.lensCropBox || this.selectionBox;

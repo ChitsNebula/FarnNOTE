@@ -1,5 +1,5 @@
 // FarmNotes Service Worker — Network-First with Offline Cache Fallback
-const CACHE_NAME = 'farmnotes-cache-v1';
+const CACHE_NAME = 'farmnotes-cache-v2';
 const STATIC_ASSETS = [
   './',
   './index.html',
