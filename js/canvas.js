@@ -2746,7 +2746,7 @@ window.CanvasEngine = class CanvasEngine {
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <title>Google Lens — กำลังประมวลผลรูปภาพ...</title>
+  <title>Google Lens — กำลังส่งรูปภาพ...</title>
   <style>
     body { margin: 0; display: flex; flex-direction: column; align-items: center;
            justify-content: center; min-height: 100vh; font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
@@ -2764,10 +2764,13 @@ window.CanvasEngine = class CanvasEngine {
                animation: spin 0.8s linear infinite; margin: 12px auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .preview-img { max-width: 90%; max-height: 220px; border-radius: 8px; border: 1px solid #3c4043; box-shadow: 0 4px 16px rgba(0,0,0,0.5); margin: 12px 0; object-fit: contain; }
-    .btn-action { display: inline-block; margin-top: 14px; padding: 12px 24px; background: #8ab4f8;
-                  color: #202124; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; transition: transform 0.15s; }
+    .btn-action { display: inline-block; margin: 8px 6px; padding: 10px 20px; background: #8ab4f8;
+                  color: #202124; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; transition: transform 0.15s; }
     .btn-action:hover { transform: scale(1.03); background: #aecbfa; }
+    .btn-ocr { background: #34a853; color: #fff; }
+    .btn-ocr:hover { background: #46bb66; }
     .tip { font-size: 13px; color: #80868b; margin-top: 10px; }
+    .ocr-box { margin-top: 15px; padding: 12px; background: #2d2e30; border-radius: 8px; max-width: 480px; width: 100%; box-sizing: border-box; }
   </style>
 </head>
 <body>
@@ -2777,7 +2780,14 @@ window.CanvasEngine = class CanvasEngine {
   <div class="spinner" id="spin"></div>
   <p id="msg">กำลังส่งรูปภาพไปยัง Google Lens…</p>
   <img class="preview-img" id="img-preview" src="${previewUrl}" alt="Crop Preview" />
-  <div id="action-area" style="display:none;">
+  
+  <div id="ocr-area" class="ocr-box" style="display:none;">
+    <p style="font-size:13px;color:#bdc1c6;margin-bottom:6px;">ข้อความที่ตรวจพบในภาพ:</p>
+    <p id="ocr-text" style="font-size:14px;color:#8ab4f8;font-weight:500;margin-bottom:8px;"></p>
+    <a id="btn-ocr" class="btn-action btn-ocr" href="#" target="_blank">🔍 ค้นหาคำตอบของโจทย์นี้บน Google</a>
+  </div>
+
+  <div id="action-area" style="display:none;margin-top:10px;">
     <a id="btn-fb" class="btn-action" href="https://images.google.com" target="_blank">🔍 เปิด Google Images (กด Ctrl+V เพื่อค้นหา)</a>
     <p class="tip">💡 หรือคลิกขวาที่รูปภาพด้านบน แล้วเลือก <b>"ค้นหาภาพด้วย Google"</b> ได้ทันที!</p>
   </div>
@@ -2785,16 +2795,39 @@ window.CanvasEngine = class CanvasEngine {
 </html>`);
       lensWindow.document.close();
 
-      // Upload image to temporary host and redirect to modern lens.google.com/uploadbyurl
+      // OCR background scan for instant question search
+      if (window.Tesseract) {
+        try {
+          window.Tesseract.recognize(blob, 'eng+tha').then(res => {
+            if (res && res.data && res.data.text && res.data.text.trim()) {
+              const ocrText = res.data.text.trim().replace(/\s+/g, ' ');
+              if (ocrText.length > 2) {
+                try {
+                  const ocrArea = lensWindow.document.getElementById('ocr-area');
+                  const ocrBtn = lensWindow.document.getElementById('btn-ocr');
+                  const ocrTxt = lensWindow.document.getElementById('ocr-text');
+                  if (ocrArea && ocrBtn && ocrTxt) {
+                    ocrTxt.innerText = ocrText.length > 90 ? ocrText.substring(0, 90) + '...' : ocrText;
+                    ocrBtn.href = `https://www.google.com/search?q=${encodeURIComponent(ocrText)}`;
+                    ocrArea.style.display = 'block';
+                  }
+                } catch (e) {}
+              }
+            }
+          }).catch(() => {});
+        } catch (e) {}
+      }
+
+      // Upload image to direct image host (sxcu.net) and redirect to lens.google.com/uploadbyurl
       let uploadedUrl = null;
 
-      // Provider 1: tmpfiles.org (CORS supported, fast)
+      // Provider 1: sxcu.net (Returns direct raw PNG image URL with CORS)
       try {
         const ctrl = new AbortController();
         const timeout = setTimeout(() => ctrl.abort(), 4000);
         const fd = new FormData();
-        fd.append('file', blob, 'lens.png');
-        const res = await fetch('https://tmpfiles.org/api/v1/upload', {
+        fd.append('file', blob, 'crop.png');
+        const res = await fetch('https://sxcu.net/api/files/create', {
           method: 'POST',
           body: fd,
           signal: ctrl.signal
@@ -2802,33 +2835,11 @@ window.CanvasEngine = class CanvasEngine {
         clearTimeout(timeout);
         if (res.ok) {
           const json = await res.json();
-          if (json && json.data && json.data.url) {
-            uploadedUrl = json.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+          if (json && json.id) {
+            uploadedUrl = `https://sxcu.net/${json.id}.png`;
           }
         }
       } catch (e) {}
-
-      // Provider 2: Litterbox (catbox.moe, fallback)
-      if (!uploadedUrl) {
-        try {
-          const ctrl = new AbortController();
-          const timeout = setTimeout(() => ctrl.abort(), 4000);
-          const fd = new FormData();
-          fd.append('reqtype', 'fileupload');
-          fd.append('time', '1h');
-          fd.append('fileToUpload', blob, 'lens.png');
-          const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
-            method: 'POST',
-            body: fd,
-            signal: ctrl.signal
-          });
-          clearTimeout(timeout);
-          if (res.ok) {
-            const txt = (await res.text()).trim();
-            if (txt.startsWith('http')) uploadedUrl = txt;
-          }
-        } catch (e) {}
-      }
 
       if (uploadedUrl) {
         const targetLensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(uploadedUrl)}`;
