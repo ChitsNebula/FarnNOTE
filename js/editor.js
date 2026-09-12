@@ -1602,8 +1602,12 @@ window.addEventListener('message', function(e) {
 
       const dropdownBtn = meta.querySelector('.btn-page-dropdown');
       dropdownBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         e.stopPropagation();
         this.togglePageDropdownMenu(card, page, idx, dropdownBtn);
+      });
+      dropdownBtn.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
       });
 
       card.appendChild(thumbBox);
@@ -1624,20 +1628,38 @@ window.addEventListener('message', function(e) {
   }
 
   togglePageDropdownMenu(cardEl, page, pageIndex, dropdownBtn) {
-    document.querySelectorAll('.page-dropdown-menu').forEach(m => m.remove());
+    const existingMenu = document.querySelector('.page-dropdown-menu');
+    if (existingMenu) {
+      const wasForThisBtn = existingMenu._forBtn === dropdownBtn;
+      if (typeof existingMenu._cleanup === 'function') {
+        existingMenu._cleanup();
+      }
+      existingMenu.remove();
+      if (wasForThisBtn) return; // Clicked same button -> toggle closed
+    }
 
     const menu = document.createElement('div');
     menu.className = 'page-dropdown-menu';
+    menu._forBtn = dropdownBtn;
     menu.innerHTML = `
       <button class="page-dropdown-item" data-action="add"><i class="fa-solid fa-plus" style="color:var(--gn-orange)"></i> แทรกหน้าต่อจากนี้</button>
       <button class="page-dropdown-item" data-action="duplicate"><i class="fa-solid fa-copy"></i> คัดลอกหน้านี้</button>
       <button class="page-dropdown-item danger" data-action="delete"><i class="fa-solid fa-trash-can"></i> ลบหน้านี้</button>
     `;
 
+    const cleanupListeners = () => {
+      document.removeEventListener('pointerdown', closeDropdownHandler, true);
+      const gridContainer = document.querySelector('.page-overview-grid-container');
+      if (gridContainer) gridContainer.removeEventListener('scroll', closeDropdownHandler);
+    };
+    menu._cleanup = cleanupListeners;
+
     menu.querySelectorAll('.page-dropdown-item').forEach(btn => {
       btn.addEventListener('click', async (e) => {
+        e.preventDefault();
         e.stopPropagation();
         const action = btn.dataset.action;
+        cleanupListeners();
         menu.remove();
 
         if (action === 'add') {
@@ -1655,41 +1677,56 @@ window.addEventListener('message', function(e) {
     if (dropdownBtn) {
       const rect = dropdownBtn.getBoundingClientRect();
       const menuHeight = menu.offsetHeight || 130;
-      const menuWidth = menu.offsetWidth || 170;
+      const menuWidth = menu.offsetWidth || 175;
 
       let top;
-      if (rect.bottom + menuHeight + 10 > window.innerHeight && rect.top > menuHeight) {
-        top = rect.top - menuHeight - 4;
+      if (rect.bottom + menuHeight + 12 > window.innerHeight && rect.top > menuHeight) {
+        top = rect.top - menuHeight - 6;
+        menu.style.transformOrigin = 'bottom right';
       } else {
-        top = rect.bottom + 4;
+        top = rect.bottom + 6;
+        menu.style.transformOrigin = 'top right';
       }
-      top = Math.max(10, Math.min(top, window.innerHeight - menuHeight - 10));
+      top = Math.max(12, Math.min(top, window.innerHeight - menuHeight - 12));
 
       let left = rect.right - menuWidth;
-      left = Math.max(10, Math.min(left, window.innerWidth - menuWidth - 10));
+      left = Math.max(12, Math.min(left, window.innerWidth - menuWidth - 12));
 
       menu.style.position = 'fixed';
       menu.style.top = `${top}px`;
       menu.style.left = `${left}px`;
-      menu.style.zIndex = '99999';
+      menu.style.zIndex = '100050';
     }
 
     const closeDropdownHandler = (evt) => {
-      if (!menu.contains(evt.target) && evt.target !== dropdownBtn) {
-        menu.remove();
-        document.removeEventListener('click', closeDropdownHandler);
-      }
+      if (menu.contains(evt.target)) return;
+      if (dropdownBtn && dropdownBtn.contains(evt.target)) return;
+      cleanupListeners();
+      menu.remove();
     };
-    setTimeout(() => document.addEventListener('click', closeDropdownHandler), 10);
+
+    // Arm dismiss listener on next event tick so opening tap doesn't immediately dismiss it
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        document.addEventListener('pointerdown', closeDropdownHandler, true);
+        const gridContainer = document.querySelector('.page-overview-grid-container');
+        if (gridContainer) gridContainer.addEventListener('scroll', closeDropdownHandler, { passive: true });
+      }, 50);
+    });
   }
 
   async insertPageAfter(pageIndex) {
+    const curPage = this.pages[pageIndex];
+    const isLandscape = curPage ? (curPage.width > curPage.height) : false;
+    const width  = isLandscape ? (curPage.width  || 1123) : 794;
+    const height = isLandscape ? (curPage.height || 794)  : 1123;
+
     const newPage = {
       id: `page-${this.currentNotebook.id}-${Date.now()}`,
       notebookId: this.currentNotebook.id,
       index: pageIndex + 1,
-      width: 794,
-      height: 1123,
+      width,
+      height,
       template: this.currentNotebook.template || 'grid',
       strokes: [],
       textBoxes: [],
