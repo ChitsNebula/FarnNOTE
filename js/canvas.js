@@ -2739,6 +2739,8 @@ window.CanvasEngine = class CanvasEngine {
         return;
       }
 
+      const previewUrl = URL.createObjectURL(blob);
+
       lensWindow.document.open();
       lensWindow.document.write(`<!DOCTYPE html>
 <html lang="th">
@@ -2747,22 +2749,25 @@ window.CanvasEngine = class CanvasEngine {
   <title>Google Lens — กำลังประมวลผลรูปภาพ...</title>
   <style>
     body { margin: 0; display: flex; flex-direction: column; align-items: center;
-           justify-content: center; height: 100vh; font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+           justify-content: center; min-height: 100vh; font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
            background: #202124; color: #e8eaed; text-align: center; padding: 20px; box-sizing: border-box; }
-    .logo { font-size: 32px; font-weight: 700; margin-bottom: 16px; }
+    .logo { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
     .logo .g { color: #4285f4; }
     .logo .o1 { color: #ea4335; }
     .logo .o2 { color: #fbbc05; }
     .logo .g2 { color: #4285f4; }
     .logo .l { color: #34a853; }
     .logo .e { color: #ea4335; }
-    p { font-size: 15px; color: #9aa0a6; margin-top: 10px; line-height: 1.5; }
-    .spinner { width: 38px; height: 38px; border: 3px solid #3c4043;
+    p { font-size: 15px; color: #9aa0a6; margin: 8px 0; line-height: 1.5; }
+    .spinner { width: 36px; height: 36px; border: 3px solid #3c4043;
                border-top-color: #8ab4f8; border-radius: 50%;
-               animation: spin 0.8s linear infinite; margin: 16px auto; }
+               animation: spin 0.8s linear infinite; margin: 12px auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .btn-fallback { display: none; margin-top: 20px; padding: 12px 24px; background: #8ab4f8;
-                    color: #202124; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; }
+    .preview-img { max-width: 90%; max-height: 220px; border-radius: 8px; border: 1px solid #3c4043; box-shadow: 0 4px 16px rgba(0,0,0,0.5); margin: 12px 0; object-fit: contain; }
+    .btn-action { display: inline-block; margin-top: 14px; padding: 12px 24px; background: #8ab4f8;
+                  color: #202124; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; transition: transform 0.15s; }
+    .btn-action:hover { transform: scale(1.03); background: #aecbfa; }
+    .tip { font-size: 13px; color: #80868b; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -2771,7 +2776,11 @@ window.CanvasEngine = class CanvasEngine {
   </div>
   <div class="spinner" id="spin"></div>
   <p id="msg">กำลังส่งรูปภาพไปยัง Google Lens…</p>
-  <a id="btn-fb" class="btn-fallback" href="https://images.google.com" target="_self">🔍 เปิด Google Images (คัดลอกรูปแล้ว กด Ctrl+V ได้เลย)</a>
+  <img class="preview-img" id="img-preview" src="${previewUrl}" alt="Crop Preview" />
+  <div id="action-area" style="display:none;">
+    <a id="btn-fb" class="btn-action" href="https://images.google.com" target="_blank">🔍 เปิด Google Images (กด Ctrl+V เพื่อค้นหา)</a>
+    <p class="tip">💡 หรือคลิกขวาที่รูปภาพด้านบน แล้วเลือก <b>"ค้นหาภาพด้วย Google"</b> ได้ทันที!</p>
+  </div>
 </body>
 </html>`);
       lensWindow.document.close();
@@ -2779,36 +2788,44 @@ window.CanvasEngine = class CanvasEngine {
       // Upload image to temporary host and redirect to modern lens.google.com/uploadbyurl
       let uploadedUrl = null;
 
-      // Provider 1: Litterbox (catbox.moe, temporary 1h)
+      // Provider 1: tmpfiles.org (CORS supported, fast)
       try {
+        const ctrl = new AbortController();
+        const timeout = setTimeout(() => ctrl.abort(), 4000);
         const fd = new FormData();
-        fd.append('reqtype', 'fileupload');
-        fd.append('time', '1h');
-        fd.append('fileToUpload', blob, 'lens.png');
-        const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
+        fd.append('file', blob, 'lens.png');
+        const res = await fetch('https://tmpfiles.org/api/v1/upload', {
           method: 'POST',
-          body: fd
+          body: fd,
+          signal: ctrl.signal
         });
+        clearTimeout(timeout);
         if (res.ok) {
-          const txt = (await res.text()).trim();
-          if (txt.startsWith('http')) uploadedUrl = txt;
+          const json = await res.json();
+          if (json && json.data && json.data.url) {
+            uploadedUrl = json.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+          }
         }
       } catch (e) {}
 
-      // Provider 2: tmpfiles.org
+      // Provider 2: Litterbox (catbox.moe, fallback)
       if (!uploadedUrl) {
         try {
+          const ctrl = new AbortController();
+          const timeout = setTimeout(() => ctrl.abort(), 4000);
           const fd = new FormData();
-          fd.append('file', blob, 'lens.png');
-          const res = await fetch('https://tmpfiles.org/api/v1/upload', {
+          fd.append('reqtype', 'fileupload');
+          fd.append('time', '1h');
+          fd.append('fileToUpload', blob, 'lens.png');
+          const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
             method: 'POST',
-            body: fd
+            body: fd,
+            signal: ctrl.signal
           });
+          clearTimeout(timeout);
           if (res.ok) {
-            const json = await res.json();
-            if (json && json.data && json.data.url) {
-              uploadedUrl = json.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-            }
+            const txt = (await res.text()).trim();
+            if (txt.startsWith('http')) uploadedUrl = txt;
           }
         } catch (e) {}
       }
@@ -2817,14 +2834,14 @@ window.CanvasEngine = class CanvasEngine {
         const targetLensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(uploadedUrl)}`;
         lensWindow.location.replace(targetLensUrl);
       } else {
-        // Fallback: Show manual paste option
+        // Fallback: Show manual paste and context search
         try {
           const msgEl = lensWindow.document.getElementById('msg');
           const spinEl = lensWindow.document.getElementById('spin');
-          const fbBtn = lensWindow.document.getElementById('btn-fb');
+          const actEl = lensWindow.document.getElementById('action-area');
           if (spinEl) spinEl.style.display = 'none';
-          if (msgEl) msgEl.innerHTML = '📋 ระบบได้คัดลอกรูปภาพลงคลิปบอร์ดของคุณเรียบร้อยแล้ว!<br>กดปุ่มด้านล่างเพื่อเปิด Google Images แล้วกด <b>Ctrl + V</b> เพื่อค้นหาภาพได้ทันที';
-          if (fbBtn) fbBtn.style.display = 'inline-block';
+          if (msgEl) msgEl.innerHTML = '📋 ระบบได้คัดลอกรูปภาพลงคลิปบอร์ดเรียบร้อยแล้ว!';
+          if (actEl) actEl.style.display = 'block';
         } catch (e) {}
       }
 

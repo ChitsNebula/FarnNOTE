@@ -381,6 +381,28 @@ window.LibraryController = class LibraryController {
           window.CustomDialog.toast('กำลังตรวจหาอัปเดตเวอร์ชันใหม่...');
         }
 
+        // On GitHub Pages or web hosting, purge Cache Storage & Service Workers, then reload cleanly
+        if (window.location.hostname.includes('github.io') || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
+          try {
+            if ('caches' in window) {
+              const keys = await caches.keys();
+              await Promise.all(keys.map(k => caches.delete(k)));
+            }
+            if ('serviceWorker' in navigator) {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              for (const r of regs) await r.unregister();
+            }
+          } catch (e) {}
+          localStorage.setItem('farmnotes_app_version', '2.4.0');
+          if (window.CustomDialog && window.CustomDialog.toast) {
+            window.CustomDialog.toast('ล้างแคชและอัปเดตเวอร์ชันล่าสุดสำเร็จ! กำลังรีโหลด...', 2500);
+          }
+          setTimeout(() => {
+            window.location.href = window.location.pathname + '?reload=' + Date.now();
+          }, 800);
+          return;
+        }
+
         try {
           const res = await fetch('/api/update');
           const data = await res.json();
