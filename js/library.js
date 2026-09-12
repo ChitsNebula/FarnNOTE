@@ -421,17 +421,31 @@ window.LibraryController = class LibraryController {
       });
     }
 
-    // ── Backup Data (Export All) ─────────────────────────────────────────────
+    // ── Backup Data (Safe Chunked Export) ────────────────────────────────────
     const btnBackup = document.getElementById('btn-backup-data');
     if (btnBackup) {
       btnBackup.addEventListener('click', async () => {
         try {
           if (window.CustomDialog && window.CustomDialog.toast) {
-            window.CustomDialog.toast('กำลังรวบรวมและสร้างไฟล์สำรองข้อมูล...');
+            window.CustomDialog.toast('กำลังเริ่มสำรองข้อมูลสมุดโน้ต...');
           }
-          await window.Storage.downloadBackupFile();
-          if (window.CustomDialog && window.CustomDialog.toast) {
-            window.CustomDialog.toast('ส่งออกไฟล์สำรองเรียบร้อยแล้ว!');
+          btnBackup.disabled = true;
+
+          const res = await window.Storage.downloadBackupFile((curr, total, count) => {
+            if (window.CustomDialog && window.CustomDialog.toast) {
+              window.CustomDialog.toast(`กำลังดาวน์โหลดส่วนที่ ${curr}/${total} (${count} เล่ม)...`);
+            }
+          });
+
+          if (window.CustomDialog && window.CustomDialog.alert) {
+            if (res && res.totalChunks > 1) {
+              window.CustomDialog.alert(
+                'สำรองข้อมูลสำเร็จ!',
+                `เนื่องจากคุณมีสมุดโน้ตและเอกสาร PDF ขนาดใหญ่ ระบบได้แบ่งดาวน์โหลดเป็น ${res.totalChunks} ไฟล์เรียบร้อยแล้ว\n\nเมื่อไปที่เว็บใหม่ เพียงกดปุ่มกู้คืน (☁️⬆️) แล้วนำเข้าทีละไฟล์จนครบได้เลยครับ!`
+              );
+            } else {
+              window.CustomDialog.alert('สำรองข้อมูลสำเร็จ!', 'ดาวน์โหลดไฟล์สำรองข้อมูลเรียบร้อยแล้ว');
+            }
           }
         } catch (err) {
           console.error('Backup error:', err);
@@ -440,6 +454,8 @@ window.LibraryController = class LibraryController {
           } else {
             alert('ไม่สามารถสร้างไฟล์สำรองได้: ' + err.message);
           }
+        } finally {
+          btnBackup.disabled = false;
         }
       });
     }

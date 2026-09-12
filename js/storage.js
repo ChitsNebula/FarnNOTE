@@ -330,8 +330,10 @@ window.Storage = {
   },
 
   // ── Backup & Restore (Full Data Migration) ─────────────────────────────────
-  async exportAllData() {
+  async exportBatch(notebooks, partLabel = 'All') {
     const db = await getDB();
+    const nbIds = new Set(notebooks.map(n => n.id));
+
     const getAllFromStore = (storeName) => {
       return new Promise((resolve, reject) => {
         const tx = db.transaction(storeName, 'readonly');
@@ -341,13 +343,25 @@ window.Storage = {
       });
     };
 
-    const notebooks = await getAllFromStore('notebooks');
-    const pages = await getAllFromStore('pages');
-    const rawAssets = await getAllFromStore('assets');
+    // 1. Pages for this batch
+    const allPages = await getAllFromStore('pages');
+    const pages = allPages.filter(p => nbIds.has(p.notebookId));
 
-    // Convert Blobs to Base64 data URLs
+    // 2. Needed asset IDs only
+    const neededAssetIds = new Set();
+    for (const nb of notebooks) {
+      neededAssetIds.add(`asset-${nb.id}-raw-pdf`);
+      neededAssetIds.add(`asset-${nb.id}-page-1`);
+    }
+    for (const page of pages) {
+      if (page.pdfAssetId) neededAssetIds.add(page.pdfAssetId);
+    }
+
+    // 3. Assets for this batch only
+    const rawAssets = await getAllFromStore('assets');
     const assets = [];
     for (const a of rawAssets) {
+      if (!neededAssetIds.has(a.id)) continue;
       let dataUrl = a.data;
       if (a.data instanceof Blob) {
         dataUrl = await new Promise((resolve) => {
@@ -363,29 +377,58 @@ window.Storage = {
       app: 'FarmNotes',
       version: 1,
       exportedAt: new Date().toISOString(),
+      part: partLabel,
       groups: this.getGroups(),
       notebooks,
       pages,
       assets
     };
 
-    return backupData;
-  },
-
-  async downloadBackupFile() {
-    const data = await this.exportAllData();
-    const jsonStr = JSON.stringify(data);
+    const jsonStr = JSON.stringify(backupData);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const dateStr = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `FarmNotes_Backup_${dateStr}.farmnotes`;
+    a.download = `FarmNotes_Backup_${partLabel}_${dateStr}.farmnotes`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 2000);
-    return data;
+
+    return {
+      notebooksCount: notebooks.length,
+      pagesCount: pages.length,
+      assetsCount: assets.length
+    };
+  },
+
+  async downloadBackupFile(onProgress) {
+    const notebooks = await this.getAllNotebooks();
+    if (!notebooks || notebooks.length === 0) {
+      throw new Error('ไม่พบสมุดโน้ตในระบบ');
+    }
+
+    const CHUNK_SIZE = 5;
+    const totalChunks = Math.ceil(notebooks.length / CHUNK_SIZE);
+
+    if (totalChunks === 1) {
+      return await this.exportBatch(notebooks, 'All');
+    }
+
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = notebooks.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+      const partLabel = `Part${i + 1}_of_${totalChunks}`;
+      if (onProgress) {
+        onProgress(i + 1, totalChunks, chunk.length);
+      }
+      await this.exportBatch(chunk, partLabel);
+      if (i < totalChunks - 1) {
+        await new Promise(r => setTimeout(r, 1200));
+      }
+    }
+
+    return { totalChunks, totalNotebooks: notebooks.length };
   },
 
   async importAllData(data) {

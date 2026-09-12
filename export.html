@@ -291,44 +291,72 @@
       const btn = document.getElementById('btn-export-now');
       const status = document.getElementById('export-status');
       btn.disabled = true;
-      btn.innerText = '⏳ กำลังรวบรวมข้อมูลและไฟล์ PDF...';
+
+      const CHUNK_SIZE = 5;
+      const totalChunks = Math.ceil(foundNotebooks.length / CHUNK_SIZE);
 
       try {
-        const assets = [];
-        for (const a of foundAssets) {
-          let dataUrl = a.data;
-          if (a.data instanceof Blob) {
-            dataUrl = await new Promise((resolve) => {
-              const fr = new FileReader();
-              fr.onloadend = () => resolve(fr.result);
-              fr.readAsDataURL(a.data);
-            });
+        const groups = JSON.parse(localStorage.getItem('farmnotes_groups') || '[]');
+
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = foundNotebooks.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+          const chunkIds = new Set(chunk.map(n => n.id));
+          const chunkPages = foundPages.filter(p => chunkIds.has(p.notebookId));
+
+          const neededAssetIds = new Set();
+          for (const nb of chunk) {
+            neededAssetIds.add(`asset-${nb.id}-raw-pdf`);
+            neededAssetIds.add(`asset-${nb.id}-page-1`);
           }
-          assets.push({ id: a.id, data: dataUrl });
+          for (const page of chunkPages) {
+            if (page.pdfAssetId) neededAssetIds.add(page.pdfAssetId);
+          }
+
+          btn.innerText = `⏳ กำลังรวบรวมไฟล์ส่วนที่ ${i + 1}/${totalChunks}...`;
+
+          const assets = [];
+          for (const a of foundAssets) {
+            if (!neededAssetIds.has(a.id)) continue;
+            let dataUrl = a.data;
+            if (a.data instanceof Blob) {
+              dataUrl = await new Promise((resolve) => {
+                const fr = new FileReader();
+                fr.onloadend = () => resolve(fr.result);
+                fr.readAsDataURL(a.data);
+              });
+            }
+            assets.push({ id: a.id, data: dataUrl });
+          }
+
+          const backup = {
+            app: 'FarmNotes',
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            part: `Part${i + 1}_of_${totalChunks}`,
+            groups,
+            notebooks: chunk,
+            pages: chunkPages,
+            assets
+          };
+
+          const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          const dateStr = new Date().toISOString().slice(0, 10);
+          a.href = url;
+          a.download = `FarmNotes_Backup_Part${i + 1}_of_${totalChunks}_${dateStr}.farmnotes`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+          if (i < totalChunks - 1) {
+            await new Promise(r => setTimeout(r, 1200));
+          }
         }
 
-        const backup = {
-          app: 'FarmNotes',
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          groups: JSON.parse(localStorage.getItem('farmnotes_groups') || '[]'),
-          notebooks: foundNotebooks,
-          pages: foundPages,
-          assets
-        };
-
-        const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const dateStr = new Date().toISOString().slice(0, 10);
-        a.href = url;
-        a.download = `FarmNotes_Backup_${foundNotebooks.length}_Books_${dateStr}.farmnotes`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-
-        btn.innerText = '✅ ดาวน์โหลดไฟล์สำรองเรียบร้อยแล้ว!';
-        status.innerText = `ดาวน์โหลดสำเร็จ! (สมุด ${foundNotebooks.length} เล่ม, หน้า ${foundPages.length} หน้า)`;
+        btn.innerText = '✅ ดาวน์โหลดไฟล์สำรองครบทุกส่วนแล้ว!';
+        status.innerText = `ดาวน์โหลดสำเร็จทั้งหมด ${totalChunks} ไฟล์ (รวม ${foundNotebooks.length} เล่ม)`;
       } catch (err) {
         btn.disabled = false;
         btn.innerText = 'ลองใหม่อีกครั้ง';
