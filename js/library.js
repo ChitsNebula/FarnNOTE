@@ -466,6 +466,18 @@ window.LibraryController = class LibraryController {
 
           await this.loadLibrary();
 
+          if (result.notebooksCount === 0) {
+            if (window.CustomDialog && window.CustomDialog.alert) {
+              window.CustomDialog.alert(
+                'ไม่พบสมุดโน้ตในไฟล์นี้ (0 เล่ม)',
+                'ไฟล์สำรองข้อมูลที่คุณเลือกไม่มีข้อมูลสมุดโน้ตอยู่เลย\n\nสาเหตุเกิดจากตอนส่งออก คุณเปิดเครื่องมือบนเว็บแทนที่จะเปิดจากในเครื่อง\nกรุณาดูวิธีส่งออกที่ถูกต้องตามที่แนะนำนะครับ'
+              );
+            } else {
+              alert('ไม่พบสมุดโน้ตในไฟล์นี้ (0 เล่ม)');
+            }
+            return;
+          }
+
           if (window.CustomDialog && window.CustomDialog.alert) {
             window.CustomDialog.alert(
               'กู้คืนข้อมูลสำเร็จ!',
