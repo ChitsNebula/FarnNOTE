@@ -421,6 +421,70 @@ window.LibraryController = class LibraryController {
       });
     }
 
+    // ── Backup Data (Export All) ─────────────────────────────────────────────
+    const btnBackup = document.getElementById('btn-backup-data');
+    if (btnBackup) {
+      btnBackup.addEventListener('click', async () => {
+        try {
+          if (window.CustomDialog && window.CustomDialog.toast) {
+            window.CustomDialog.toast('กำลังรวบรวมและสร้างไฟล์สำรองข้อมูล...');
+          }
+          await window.Storage.downloadBackupFile();
+          if (window.CustomDialog && window.CustomDialog.toast) {
+            window.CustomDialog.toast('ส่งออกไฟล์สำรองเรียบร้อยแล้ว!');
+          }
+        } catch (err) {
+          console.error('Backup error:', err);
+          if (window.CustomDialog && window.CustomDialog.alert) {
+            window.CustomDialog.alert('เกิดข้อผิดพลาด', 'ไม่สามารถสร้างไฟล์สำรองได้: ' + err.message);
+          } else {
+            alert('ไม่สามารถสร้างไฟล์สำรองได้: ' + err.message);
+          }
+        }
+      });
+    }
+
+    // ── Restore Data (Import All) ────────────────────────────────────────────
+    const btnRestore = document.getElementById('btn-restore-data');
+    const backupFileInput = document.getElementById('backup-file-input');
+    if (btnRestore && backupFileInput) {
+      btnRestore.addEventListener('click', () => {
+        backupFileInput.value = '';
+        backupFileInput.click();
+      });
+
+      backupFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+          if (window.CustomDialog && window.CustomDialog.toast) {
+            window.CustomDialog.toast('กำลังนำเข้าข้อมูลและรูปภาพ...');
+          }
+          const text = await file.text();
+          const result = await window.Storage.importAllData(text);
+
+          await this.loadLibrary();
+
+          if (window.CustomDialog && window.CustomDialog.alert) {
+            window.CustomDialog.alert(
+              'กู้คืนข้อมูลสำเร็จ!',
+              `นำเข้าเรียบร้อยแล้ว:\n- สมุดโน้ต: ${result.notebooksCount} เล่ม\n- หน้ากระดาษ: ${result.pagesCount} หน้า\n- ไฟล์แนบ/รูปภาพ/PDF: ${result.assetsCount} รายการ`
+            );
+          } else {
+            alert(`กู้คืนข้อมูลสำเร็จ! นำเข้าสมุดโน้ต ${result.notebooksCount} เล่มเรียบร้อยแล้ว`);
+          }
+        } catch (err) {
+          console.error('Restore error:', err);
+          if (window.CustomDialog && window.CustomDialog.alert) {
+            window.CustomDialog.alert('เกิดข้อผิดพลาด', 'ไม่สามารถนำเข้าข้อมูลได้: ' + err.message);
+          } else {
+            alert('ไม่สามารถนำเข้าข้อมูลได้: ' + err.message);
+          }
+        }
+      });
+    }
+
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => b.classList.remove('active'));

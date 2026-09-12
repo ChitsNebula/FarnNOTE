@@ -327,5 +327,132 @@ window.Storage = {
       ],
       images: []
     });
+  },
+
+  // ── Backup & Restore (Full Data Migration) ─────────────────────────────────
+  async exportAllData() {
+    const db = await getDB();
+    const getAllFromStore = (storeName) => {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    };
+
+    const notebooks = await getAllFromStore('notebooks');
+    const pages = await getAllFromStore('pages');
+    const rawAssets = await getAllFromStore('assets');
+
+    // Convert Blobs to Base64 data URLs
+    const assets = [];
+    for (const a of rawAssets) {
+      let dataUrl = a.data;
+      if (a.data instanceof Blob) {
+        dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(a.data);
+        });
+      }
+      assets.push({ id: a.id, data: dataUrl });
+    }
+
+    const backupData = {
+      app: 'FarmNotes',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      groups: this.getGroups(),
+      notebooks,
+      pages,
+      assets
+    };
+
+    return backupData;
+  },
+
+  async downloadBackupFile() {
+    const data = await this.exportAllData();
+    const jsonStr = JSON.stringify(data);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `FarmNotes_Backup_${dateStr}.farmnotes`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return data;
+  },
+
+  async importAllData(data) {
+    if (typeof data === 'string') {
+      data = JSON.parse(data);
+    }
+    if (!data || (!data.notebooks && !data.pages)) {
+      throw new Error('ไฟล์สำรองข้อมูลไม่ถูกต้องหรือไม่สมบูรณ์');
+    }
+
+    // 1. Restore groups
+    if (Array.isArray(data.groups) && data.groups.length > 0) {
+      try {
+        const existingGroups = this.getGroups();
+        const groupMap = new Map();
+        existingGroups.forEach(g => groupMap.set(g.id, g));
+        data.groups.forEach(g => groupMap.set(g.id, g));
+        localStorage.setItem('farmnotes_groups', JSON.stringify(Array.from(groupMap.values())));
+      } catch (e) {
+        console.warn('Could not restore groups:', e);
+      }
+    }
+
+    const db = await getDB();
+
+    // 2. Restore assets
+    if (Array.isArray(data.assets)) {
+      for (const a of data.assets) {
+        try {
+          let blob = a.data;
+          if (typeof a.data === 'string' && a.data.startsWith('data:')) {
+            const arr = a.data.split(',');
+            const mimeMatch = arr[0].match(/:(.*?);/);
+            const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+              u8arr[n] = bstr.charCodeAt(n);
+            }
+            blob = new Blob([u8arr], { type: mime });
+          }
+          await this.saveAsset(a.id, blob);
+        } catch (err) {
+          console.warn('Error importing asset:', a.id, err);
+        }
+      }
+    }
+
+    // 3. Restore notebooks
+    if (Array.isArray(data.notebooks)) {
+      for (const nb of data.notebooks) {
+        await this.saveNotebook(nb);
+      }
+    }
+
+    // 4. Restore pages
+    if (Array.isArray(data.pages)) {
+      for (const pg of data.pages) {
+        await this.savePage(pg);
+      }
+    }
+
+    return {
+      notebooksCount: data.notebooks ? data.notebooks.length : 0,
+      pagesCount: data.pages ? data.pages.length : 0,
+      assetsCount: data.assets ? data.assets.length : 0
+    };
   }
 };

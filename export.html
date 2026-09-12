@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>FarmNotes — ส่งออกข้อมูลสำรอง (Data Export Tool)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f4f5f7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      max-width: 520px;
+      width: 100%;
+      padding: 36px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 22px;
+      margin-top: 0;
+      color: #1c1c1e;
+    }
+    p {
+      color: #636366;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .btn {
+      background: #007AFF;
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: #0056b3;
+      transform: translateY(-1px);
+    }
+    .status {
+      margin-top: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #34C759;
+    }
+    .error {
+      color: #FF3B30;
+    }
+    .box-info {
+      background: #f0f7ff;
+      border: 1px solid #cce5ff;
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 24px;
+      font-size: 13px;
+      color: #004085;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size: 48px; margin-bottom: 12px;">📦</div>
+    <h1>เครื่องมือดึงข้อมูลสมุดโน้ตเดิม</h1>
+    <p>
+      เนื่องจากคุณเปิดใช้งานบนเว็บใหม่ สมุดโน้ตเดิมยังคงอยู่ในเบราว์เซอร์ของคุณอย่างปลอดภัย 100%<br>
+      กดปุ่มด้านล่างนี้เพื่อดาวน์โหลดไฟล์สำรองข้อมูล แล้วนำไปกด <b>"นำเข้า / กู้คืนข้อมูล"</b> บนเว็บใหม่ได้ทันที
+    </p>
+
+    <button id="btn-export" class="btn">
+      <span>💾 ดาวน์โหลดไฟล์สำรองข้อมูล (Export Notes)</span>
+    </button>
+
+    <div id="status" class="status"></div>
+
+    <div class="box-info">
+      <b>ขั้นตอนต่อไป:</b><br>
+      1. กดปุ่มดาวน์โหลดไฟล์ด้านบน จะได้ไฟล์นามสกุล <code>.farmnotes</code><br>
+      2. เปิดเว็บ <b>https://chitsnebula.github.io/FarnNOTE/</b> บน Chromebook<br>
+      3. กดปุ่มก้อนเมฆรูปลูกศรชี้ขึ้น <b>(☁️⬆️)</b> ตรงแถบด้านบน<br>
+      4. เลือกไฟล์ที่เพิ่งดาวน์โหลดมา สมุดและ PDF ทุกเล่มจะกลับมาครบถ้วนทันที!
+    </div>
+  </div>
+
+  <script>
+    const btn = document.getElementById('btn-export');
+    const status = document.getElementById('status');
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      status.innerText = 'กำลังอ่านฐานข้อมูลสมุดโน้ตและไฟล์ PDF...';
+      status.className = 'status';
+
+      try {
+        const db = await new Promise((resolve, reject) => {
+          const req = indexedDB.open('GoodNotesWebDB', 1);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+
+        const getAll = (storeName) => new Promise((resolve, reject) => {
+          if (!db.objectStoreNames.contains(storeName)) return resolve([]);
+          const tx = db.transaction(storeName, 'readonly');
+          const req = tx.objectStore(storeName).getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => reject(req.error);
+        });
+
+        const notebooks = await getAll('notebooks');
+        const pages = await getAll('pages');
+        const rawAssets = await getAll('assets');
+
+        if (notebooks.length === 0) {
+          status.innerText = 'ไม่พบสมุดโน้ตในที่อยู่นี้ (อาจยังไม่ได้เขียน หรือเปิดผิดไฟล์)';
+          status.className = 'status error';
+          btn.disabled = false;
+          return;
+        }
+
+        const assets = [];
+        for (const a of rawAssets) {
+          let dataUrl = a.data;
+          if (a.data instanceof Blob) {
+            dataUrl = await new Promise((resolve) => {
+              const fr = new FileReader();
+              fr.onloadend = () => resolve(fr.result);
+              fr.readAsDataURL(a.data);
+            });
+          }
+          assets.push({ id: a.id, data: dataUrl });
+        }
+
+        const backup = {
+          app: 'FarmNotes',
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          groups: JSON.parse(localStorage.getItem('farmnotes_groups') || '[]'),
+          notebooks,
+          pages,
+          assets
+        };
+
+        const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        a.href = url;
+        a.download = `FarmNotes_Backup_${dateStr}.farmnotes`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        status.innerText = `ดาวน์โหลดสำเร็จ! (พบสมุด ${notebooks.length} เล่ม, ${pages.length} หน้า)`;
+      } catch (err) {
+        status.innerText = 'เกิดข้อผิดพลาด: ' + err.message;
+        status.className = 'status error';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
