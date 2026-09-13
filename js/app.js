@@ -26,6 +26,10 @@ class App {
     try {
       await window.Storage.seedInitialSampleDataIfEmpty();
       this.showLibrary();
+
+      if (window.WakeLockManager && typeof window.WakeLockManager.init === 'function') {
+        window.WakeLockManager.init();
+      }
     } catch (err) {
       console.error('App initialization error:', err);
     }

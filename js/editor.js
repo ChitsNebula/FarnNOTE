@@ -660,6 +660,23 @@ window.EditorController = class EditorController {
 
     document.addEventListener('fullscreenchange', updateFullscreenIcon);
 
+    // ── Screen Wake Lock (Keep Awake on Chromebook / PC) ─────────────────────
+    const btnEdWake = document.getElementById('btn-editor-wakelock');
+    if (btnEdWake) {
+      btnEdWake.addEventListener('click', async () => {
+        if (window.WakeLockManager) {
+          const res = await window.WakeLockManager.toggle();
+          if (window.CustomDialog && window.CustomDialog.toast) {
+            if (res.enabled) {
+              window.CustomDialog.toast('เปิดโหมดป้องกันจอดับแล้ว ☕ (หน้าจอจะไม่ดับขณะเปิดแอปนี้)', 2500);
+            } else {
+              window.CustomDialog.toast('ปิดโหมดป้องกันจอดับแล้ว (หน้าจอจะพักตามการตั้งค่าเครื่อง)', 2500);
+            }
+          }
+        }
+      });
+    }
+
     // Auto-restore Fullscreen when user switches back to GoodNotes tab
     const restoreFullscreenOnTabReturn = () => {
       if (this.wasFullscreen && !document.fullscreenElement) {
