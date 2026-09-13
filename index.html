@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="css/reset.css">
   <link rel="stylesheet" href="css/theme.css">
   <link rel="stylesheet" href="css/library.css">
-  <link rel="stylesheet" href="css/editor.css?v=2.11.0">
+  <link rel="stylesheet" href="css/editor.css?v=2.11.1">
 
   <!-- External Libraries: PDF.js & pdf-lib -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -30,7 +30,7 @@
   <!-- Auto-Purge Cache & Service Worker on Version Bump (Fixes Chromebook 403 & stale code) -->
   <script>
     (function() {
-      const APP_VER = '2.11.0';
+      const APP_VER = '2.11.1';
       if (localStorage.getItem('farmnotes_app_version') !== APP_VER) {
         localStorage.setItem('farmnotes_app_version', APP_VER);
         if ('caches' in window) {
@@ -114,9 +114,6 @@
             </button>
             <button class="btn-icon" id="btn-library-fullscreen" title="เต็มหน้าจอ (F11)">
               <i class="fa-solid fa-expand" id="library-fullscreen-icon"></i>
-            </button>
-            <button class="btn-icon active" id="btn-library-wakelock" title="ป้องกันหน้าจอดับ: เปิดอยู่ (คลิกเพื่อปิดโหมดนี้)">
-              <i class="fa-solid fa-mug-hot" id="library-wakelock-icon"></i>
             </button>
             <button class="btn-icon" id="btn-toggle-view" title="เปลี่ยนมุมมอง (Grid/List)">
               <i class="fa-solid fa-border-all"></i>
@@ -207,9 +204,6 @@
             <button class="btn-icon-sm" id="btn-zoom-reset" title="ขนาดดั้งเดิม"><i class="fa-solid fa-expand"></i></button>
             <button class="btn-icon-sm" id="btn-fullscreen" title="เต็มหน้าจอ / ออกจากเต็มหน้าจอ (F11)">
               <i class="fa-solid fa-maximize" id="fullscreen-icon"></i>
-            </button>
-            <button class="btn-icon-sm active" id="btn-editor-wakelock" title="ป้องกันหน้าจอดับ: เปิดอยู่ (คลิกเพื่อปิดโหมดนี้)">
-              <i class="fa-solid fa-mug-hot" id="editor-wakelock-icon"></i>
             </button>
           </div>
 
@@ -710,13 +704,13 @@
 
   <!-- Standard Application Scripts (No module / Works on file:// protocol!) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/tools.js?v=2.11.0"></script>
-  <script src="js/storage.js?v=2.11.0"></script>
-  <script src="js/canvas.js?v=2.11.0"></script>
-  <script src="js/pdf.js?v=2.11.0"></script>
-  <script src="js/library.js?v=2.11.0"></script>
-  <script src="js/editor.js?v=2.11.0"></script>
-  <script src="js/app.js?v=2.11.0"></script>
+  <script src="js/tools.js?v=2.11.1"></script>
+  <script src="js/storage.js?v=2.11.1"></script>
+  <script src="js/canvas.js?v=2.11.1"></script>
+  <script src="js/pdf.js?v=2.11.1"></script>
+  <script src="js/library.js?v=2.11.1"></script>
+  <script src="js/editor.js?v=2.11.1"></script>
+  <script src="js/app.js?v=2.11.1"></script>
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
       window.addEventListener('load', () => {

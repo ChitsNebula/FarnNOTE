@@ -578,44 +578,40 @@ window.CustomDialog = {
   }
 };
 
-// Screen Wake Lock Manager — Keeps screen awake on Chromebook / tablets / PC
+// Screen Wake Lock Manager — Permanently keeps screen awake on Chromebook / tablets / PC
 window.WakeLockManager = {
   wakeLock: null,
-  enabled: true,
   _listenersBound: false,
 
   init() {
-    const stored = localStorage.getItem('farmnotes_wake_lock_enabled');
-    this.enabled = stored !== null ? stored === 'true' : true;
-
     if (!this._listenersBound) {
       this._listenersBound = true;
 
+      // Re-acquire lock when page visibility changes (switching back to tab)
       document.addEventListener('visibilitychange', async () => {
-        if (document.visibilityState === 'visible' && this.enabled) {
+        if (document.visibilityState === 'visible') {
           await this.request();
         }
       });
 
+      // Keep-alive heartbeat: re-check every 25 seconds
       setInterval(() => {
-        if (this.enabled && document.visibilityState === 'visible' && !this.isActive()) {
+        if (document.visibilityState === 'visible' && !this.isActive()) {
           this.request();
         }
-      }, 30000);
+      }, 25000);
 
+      // Re-acquire on user interaction if lost
       ['pointerdown', 'keydown', 'touchstart'].forEach(evt => {
         window.addEventListener(evt, () => {
-          if (this.enabled && !this.isActive() && document.visibilityState === 'visible') {
+          if (!this.isActive() && document.visibilityState === 'visible') {
             this.request();
           }
         }, { passive: true });
       });
     }
 
-    if (this.enabled) {
-      this.request();
-    }
-    this.updateUI();
+    this.request();
   },
 
   async request() {
@@ -627,59 +623,15 @@ window.WakeLockManager = {
       this.wakeLock = await navigator.wakeLock.request('screen');
       this.wakeLock.addEventListener('release', () => {
         this.wakeLock = null;
-        this.updateUI();
       });
-      this.updateUI();
       return true;
     } catch (err) {
       this.wakeLock = null;
-      this.updateUI();
       return false;
-    }
-  },
-
-  async release() {
-    if (this.wakeLock) {
-      try {
-        await this.wakeLock.release();
-      } catch (err) {}
-      this.wakeLock = null;
-    }
-    this.updateUI();
-  },
-
-  async toggle() {
-    this.enabled = !this.enabled;
-    localStorage.setItem('farmnotes_wake_lock_enabled', this.enabled ? 'true' : 'false');
-    if (this.enabled) {
-      const ok = await this.request();
-      this.updateUI();
-      return { enabled: true, active: ok };
-    } else {
-      await this.release();
-      this.updateUI();
-      return { enabled: false, active: false };
     }
   },
 
   isActive() {
     return !!(this.wakeLock && !this.wakeLock.released);
-  },
-
-  updateUI() {
-    const active = this.enabled;
-    const btns = [
-      document.getElementById('btn-library-wakelock'),
-      document.getElementById('btn-editor-wakelock')
-    ];
-
-    btns.forEach(btn => {
-      if (!btn) return;
-      btn.classList.toggle('active', active);
-      const title = active
-        ? 'ป้องกันหน้าจอดับ: เปิดอยู่ (คลิกเพื่อปิดโหมดนี้)'
-        : 'ป้องกันหน้าจอดับ: ปิดอยู่ (คลิกเพื่อเปิดโหมดป้องกันจอดับ)';
-      btn.title = title;
-    });
   }
 };

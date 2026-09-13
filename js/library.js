@@ -357,23 +357,6 @@ window.LibraryController = class LibraryController {
       updateLibFsIcon();
     }
 
-    // ── Screen Wake Lock (Keep Awake on Chromebook / PC) ─────────────────────
-    const btnLibWake = document.getElementById('btn-library-wakelock');
-    if (btnLibWake) {
-      btnLibWake.addEventListener('click', async () => {
-        if (window.WakeLockManager) {
-          const res = await window.WakeLockManager.toggle();
-          if (window.CustomDialog && window.CustomDialog.toast) {
-            if (res.enabled) {
-              window.CustomDialog.toast('เปิดโหมดป้องกันจอดับแล้ว ☕ (หน้าจอจะไม่ดับขณะเปิดแอปนี้)', 2500);
-            } else {
-              window.CustomDialog.toast('ปิดโหมดป้องกันจอดับแล้ว (หน้าจอจะพักตามการตั้งค่าเครื่อง)', 2500);
-            }
-          }
-        }
-      });
-    }
-
     // ── Check for Updates ────────────────────────────────────────────────────
     const btnCheckUpdate = document.getElementById('btn-check-update');
     const updateIcon = document.getElementById('update-btn-icon');
@@ -410,7 +393,7 @@ window.LibraryController = class LibraryController {
               for (const r of regs) await r.unregister();
             }
           } catch (e) {}
-          localStorage.setItem('farmnotes_app_version', '2.11.0');
+          localStorage.setItem('farmnotes_app_version', '2.11.1');
           if (window.CustomDialog && window.CustomDialog.toast) {
             window.CustomDialog.toast('ล้างแคชและอัปเดตเวอร์ชันล่าสุดสำเร็จ! กำลังรีโหลด...', 2500);
           }
