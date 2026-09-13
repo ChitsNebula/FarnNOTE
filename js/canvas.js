@@ -759,10 +759,16 @@ window.CanvasEngine = class CanvasEngine {
   getCanvasCoords(e, view) {
     const el = view.uiCanvas || view.container;
     const rect = el.getBoundingClientRect();
+    const tiltX = e.tiltX || 0;
+    const tiltY = e.tiltY || 0;
+    const tilt = Math.hypot(tiltX, tiltY);
     return {
       x: (e.clientX - rect.left) / this.zoom,
       y: (e.clientY - rect.top) / this.zoom,
-      pressure: e.pressure > 0 ? e.pressure : 0.5
+      pressure: (e.pressure !== undefined && e.pressure > 0) ? e.pressure : 0.5,
+      tilt,
+      tiltX,
+      tiltY
     };
   }
 
@@ -1025,6 +1031,8 @@ window.CanvasEngine = class CanvasEngine {
 
       this.isDrawing = true;
       this.currentPoints = [pt];
+      this._lastRawPt = pt;
+      this._smoothPt = { x: pt.x, y: pt.y, pressure: pt.pressure, tilt: pt.tilt, tiltX: pt.tiltX, tiltY: pt.tiltY };
       this.lastPointerTime = Date.now();
       if (this.shapeHoldTimer) clearTimeout(this.shapeHoldTimer);
       this.heldShape = null;
@@ -1338,7 +1346,62 @@ window.CanvasEngine = class CanvasEngine {
       }
 
 
-      this.currentPoints.push(pt);
+      // Coalesced events tracking for ultra-responsive 120Hz/240Hz digitizer polling
+      const rawEvents = (e.getCoalescedEvents && e.getCoalescedEvents().length > 0)
+        ? e.getCoalescedEvents()
+        : [e];
+
+      for (let ei = 0; ei < rawEvents.length; ei++) {
+        const subEvt = rawEvents[ei];
+        const rawPt = this.getCanvasCoords(subEvt, view);
+
+        if (this.currentPoints.length === 0) {
+          this.currentPoints.push(rawPt);
+          this._lastRawPt = rawPt;
+          this._smoothPt = { x: rawPt.x, y: rawPt.y, pressure: rawPt.pressure, tilt: rawPt.tilt, tiltX: rawPt.tiltX, tiltY: rawPt.tiltY };
+          continue;
+        }
+
+        const lastRaw = this._lastRawPt || this.currentPoints[this.currentPoints.length - 1];
+        const dx = rawPt.x - lastRaw.x;
+        const dy = rawPt.y - lastRaw.y;
+        const dist = Math.hypot(dx, dy);
+
+        // 1. Hardware Jitter Deadzone: ignore micro-hops (< 1.2px) from digitizer quantization
+        if (dist < 1.2 && this.currentPoints.length > 1) {
+          continue;
+        }
+        this._lastRawPt = rawPt;
+
+        // 2. Adaptive StreamLine Filter for Tilt Compensation:
+        // Chromebook USI pens suffer severe centroid hopping when tilted (> 20°).
+        // Adapt alpha dynamically: upright = 0.75 (instantaneous), heavy tilt = down to 0.40 (smooth & stable)
+        const tiltDeg = rawPt.tilt || 0;
+        let alpha = 0.75;
+        if (tiltDeg > 20) {
+          const tiltRatio = Math.min(1.0, (tiltDeg - 20) / 50); // 0 at 20°, 1 at 70°
+          alpha = 0.75 - (tiltRatio * 0.35); // Smoothly transitions from 0.75 down to 0.40
+        }
+
+        const prevSmooth = this._smoothPt || lastRaw;
+        const smoothX = prevSmooth.x + alpha * (rawPt.x - prevSmooth.x);
+        const smoothY = prevSmooth.y + alpha * (rawPt.y - prevSmooth.y);
+
+        // 3. Pressure Low-Pass Filter: dampens erratic side-load friction spikes
+        const prevPr = (prevSmooth.pressure !== undefined && prevSmooth.pressure > 0) ? prevSmooth.pressure : 0.5;
+        const smoothPr = prevPr * 0.70 + (rawPt.pressure || 0.5) * 0.30;
+
+        this._smoothPt = {
+          x: smoothX,
+          y: smoothY,
+          pressure: smoothPr,
+          tilt: rawPt.tilt,
+          tiltX: rawPt.tiltX,
+          tiltY: rawPt.tiltY
+        };
+
+        this.currentPoints.push(this._smoothPt);
+      }
 
       if (this.shapeHoldTimer) clearTimeout(this.shapeHoldTimer);
 
@@ -1575,6 +1638,8 @@ window.CanvasEngine = class CanvasEngine {
 
       this.clearLayer(view.activeCtx, view);
       this.currentPoints = [];
+      this._lastRawPt = null;
+      this._smoothPt = null;
       // Pen lifted — clear any scroll state that may have accumulated via touchstart
       this._touchScrollStart = null;
       this.isDrawing = false;
@@ -1584,6 +1649,8 @@ window.CanvasEngine = class CanvasEngine {
       this.restorePreviousToolIfEraser();
       this.isDrawing = false;
       this._touchScrollStart = null;
+      this._lastRawPt = null;
+      this._smoothPt = null;
       this.clearLayer(view.activeCtx, view);
       this.currentPoints = [];
     });
@@ -2112,8 +2179,8 @@ window.CanvasEngine = class CanvasEngine {
 
         // First initial segment from p0 to mid0
         const initPr = (points[0].pressure && !isNaN(points[0].pressure) && points[0].pressure > 0) ? points[0].pressure : 0.5;
-        const initW = Math.max(1, size * (penStyle === 'brush' ? (0.3 + initPr * 1.3) : (0.5 + initPr * 0.8)));
-        ctx.lineWidth = initW;
+        let currentW = Math.max(1, size * (penStyle === 'brush' ? (0.3 + initPr * 1.3) : (0.5 + initPr * 0.8)));
+        ctx.lineWidth = currentW;
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
         ctx.lineTo(midX, midY);
@@ -2132,8 +2199,10 @@ window.CanvasEngine = class CanvasEngine {
             ? (0.3 + pr * 1.3)
             : (0.5 + pr * 0.8);
           const segWidth = Math.max(1, size * pressureFactor);
+          // Smooth width transition between segments to eliminate stepped joint notches
+          currentW = currentW * 0.65 + segWidth * 0.35;
 
-          ctx.lineWidth = segWidth;
+          ctx.lineWidth = currentW;
           ctx.beginPath();
           ctx.moveTo(midX, midY);
           ctx.quadraticCurveTo(pCurrent.x, pCurrent.y, nextMidX, nextMidY);
@@ -2146,8 +2215,9 @@ window.CanvasEngine = class CanvasEngine {
         // Final segment to last point
         const lastPt = points[points.length - 1];
         const lastPr = (lastPt.pressure && !isNaN(lastPt.pressure) && lastPt.pressure > 0) ? lastPt.pressure : 0.5;
-        const lastW = Math.max(1, size * (penStyle === 'brush' ? (0.3 + lastPr * 1.3) : (0.5 + lastPr * 0.8)));
-        ctx.lineWidth = lastW;
+        const finalTargetW = Math.max(1, size * (penStyle === 'brush' ? (0.3 + lastPr * 1.3) : (0.5 + lastPr * 0.8)));
+        currentW = currentW * 0.65 + finalTargetW * 0.35;
+        ctx.lineWidth = currentW;
         ctx.beginPath();
         ctx.moveTo(midX, midY);
         ctx.lineTo(lastPt.x, lastPt.y);

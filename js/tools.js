@@ -30,21 +30,38 @@ window.ToolState = {
   textColor: '#1C1C1E'
 };
 
-// Spline smoothing interpolation for smooth natural handwriting
-window.catmullRomSpline = function(points, samplesPerSegment = 6) {
-  if (points.length < 3) return points;
+// Spline smoothing interpolation for smooth natural handwriting with jitter elimination
+window.catmullRomSpline = function(points, maxSamplesPerSegment = 4) {
+  if (!points || points.length < 3) return points || [];
+
+  // Pre-filter: remove points that are too close (< 1.8px) to prevent Catmull-Rom polynomial ripple
+  const filtered = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const prev = filtered[filtered.length - 1];
+    const curr = points[i];
+    const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+    if (dist >= 1.8 || i === points.length - 1) {
+      filtered.push(curr);
+    }
+  }
+
+  if (filtered.length < 3) return filtered;
 
   const result = [];
-  result.push(points[0]);
+  result.push(filtered[0]);
 
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = i > 0 ? points[i - 1] : points[i];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = i < points.length - 2 ? points[i + 2] : p2;
+  for (let i = 0; i < filtered.length - 1; i++) {
+    const p0 = i > 0 ? filtered[i - 1] : filtered[i];
+    const p1 = filtered[i];
+    const p2 = filtered[i + 1];
+    const p3 = i < filtered.length - 2 ? filtered[i + 2] : p2;
 
-    for (let t = 1; t <= samplesPerSegment; t++) {
-      const u = t / samplesPerSegment;
+    const segDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    // Adaptive sample count: short segments don't need redundant sub-points!
+    const steps = Math.max(1, Math.min(maxSamplesPerSegment, Math.round(segDist / 3.5)));
+
+    for (let t = 1; t <= steps; t++) {
+      const u = t / steps;
       const u2 = u * u;
       const u3 = u2 * u;
 

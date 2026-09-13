@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="css/reset.css">
   <link rel="stylesheet" href="css/theme.css">
   <link rel="stylesheet" href="css/library.css">
-  <link rel="stylesheet" href="css/editor.css?v=2.8.0">
+  <link rel="stylesheet" href="css/editor.css?v=2.9.0">
 
   <!-- External Libraries: PDF.js & pdf-lib -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -30,7 +30,7 @@
   <!-- Auto-Purge Cache & Service Worker on Version Bump (Fixes Chromebook 403 & stale code) -->
   <script>
     (function() {
-      const APP_VER = '2.8.0';
+      const APP_VER = '2.9.0';
       if (localStorage.getItem('farmnotes_app_version') !== APP_VER) {
         localStorage.setItem('farmnotes_app_version', APP_VER);
         if ('caches' in window) {
@@ -704,13 +704,13 @@
 
   <!-- Standard Application Scripts (No module / Works on file:// protocol!) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/tools.js?v=2.8.0"></script>
-  <script src="js/storage.js?v=2.8.0"></script>
-  <script src="js/canvas.js?v=2.8.0"></script>
-  <script src="js/pdf.js?v=2.8.0"></script>
-  <script src="js/library.js?v=2.8.0"></script>
-  <script src="js/editor.js?v=2.8.0"></script>
-  <script src="js/app.js?v=2.8.0"></script>
+  <script src="js/tools.js?v=2.9.0"></script>
+  <script src="js/storage.js?v=2.9.0"></script>
+  <script src="js/canvas.js?v=2.9.0"></script>
+  <script src="js/pdf.js?v=2.9.0"></script>
+  <script src="js/library.js?v=2.9.0"></script>
+  <script src="js/editor.js?v=2.9.0"></script>
+  <script src="js/app.js?v=2.9.0"></script>
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
       window.addEventListener('load', () => {
