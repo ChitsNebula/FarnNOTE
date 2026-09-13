@@ -746,8 +746,12 @@ window.EditorController = class EditorController {
         if (!tool) return;
 
         if (tool === 'camera') {
-          const btnCam = document.getElementById('btn-camera-capture');
-          if (btnCam) btnCam.click();
+          if (typeof this.openCameraCapture === 'function') {
+            this.openCameraCapture();
+          } else {
+            const btnCam = document.getElementById('btn-camera-capture');
+            if (btnCam) btnCam.click();
+          }
           return;
         }
 
@@ -912,8 +916,12 @@ window.EditorController = class EditorController {
 
     let mediaStream = null;
     let currentFacingMode = 'environment';
+    let modalOpenedAt = 0;
+    let backdropPointerDown = false;
+    let cameraSessionId = 0;
 
     const stopStream = () => {
+      cameraSessionId++; // Invalidate any ongoing stream attempts
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => {
           try { track.stop(); } catch (e) {}
@@ -940,6 +948,7 @@ window.EditorController = class EditorController {
 
     const startCamera = async (facingMode = 'environment') => {
       stopStream();
+      const currentSession = cameraSessionId;
       showLiveStream();
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -962,6 +971,9 @@ window.EditorController = class EditorController {
       let lastErr = null;
 
       for (const constraints of attempts) {
+        if (currentSession !== cameraSessionId || cameraModal.classList.contains('hidden')) {
+          return;
+        }
         try {
           stream = await navigator.mediaDevices.getUserMedia(constraints);
           if (stream) break;
@@ -969,6 +981,16 @@ window.EditorController = class EditorController {
           lastErr = err;
           console.warn('getUserMedia attempt failed with constraints:', constraints, err);
         }
+      }
+
+      // If user closed the modal while camera was loading, terminate the stream immediately
+      if (currentSession !== cameraSessionId || cameraModal.classList.contains('hidden')) {
+        if (stream) {
+          stream.getTracks().forEach(track => {
+            try { track.stop(); } catch (e) {}
+          });
+        }
+        return;
       }
 
       if (stream && videoEl) {
@@ -1052,34 +1074,70 @@ window.EditorController = class EditorController {
       });
     }
 
-    this.bindInstantTap(btnCamera, () => {
+    const openCameraModal = (e) => {
+      if (e) {
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      }
+      modalOpenedAt = Date.now();
+      backdropPointerDown = false;
       cameraModal.classList.remove('hidden');
       startCamera(currentFacingMode);
+    };
+
+    this.openCameraCapture = openCameraModal;
+
+    this.bindInstantTap(btnCamera, (e) => {
+      openCameraModal(e);
     });
 
     if (btnClose) {
-      this.bindInstantTap(btnClose, () => {
+      this.bindInstantTap(btnClose, (e) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
         stopStream();
         cameraModal.classList.add('hidden');
       });
     }
 
-    cameraModal.addEventListener('click', (e) => {
+    // Stop click events inside the card from bubbling to backdrop
+    const cameraCard = cameraModal.querySelector('.camera-modal-card');
+    if (cameraCard) {
+      cameraCard.addEventListener('pointerdown', (e) => e.stopPropagation());
+      cameraCard.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    cameraModal.addEventListener('pointerdown', (e) => {
       if (e.target === cameraModal) {
-        stopStream();
-        cameraModal.classList.add('hidden');
+        backdropPointerDown = true;
+      } else {
+        backdropPointerDown = false;
       }
     });
 
+    cameraModal.addEventListener('click', (e) => {
+      // 1. Ignore click if modal was opened within 400ms (filters out tap-through / click-bleed)
+      if (Date.now() - modalOpenedAt < 400) {
+        e.stopPropagation();
+        return;
+      }
+      // 2. Only close if BOTH pointerdown AND click originated on the backdrop
+      if (backdropPointerDown && e.target === cameraModal) {
+        stopStream();
+        cameraModal.classList.add('hidden');
+      }
+      backdropPointerDown = false;
+    });
+
     if (btnSwitch) {
-      this.bindInstantTap(btnSwitch, () => {
+      this.bindInstantTap(btnSwitch, (e) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
         currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
         startCamera(currentFacingMode);
       });
     }
 
     if (btnShutter) {
-      this.bindInstantTap(btnShutter, () => {
+      this.bindInstantTap(btnShutter, (e) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
         if (!videoEl || !videoEl.videoWidth || !videoEl.videoHeight) return;
 
         snapshotCanvas.width = videoEl.videoWidth;

@@ -2104,6 +2104,10 @@
 }
 
 /* Camera Photo & Direct Insert Modal System (Edge-to-Edge Big Screen) */
+#camera-modal {
+  z-index: 100050 !important;
+}
+
 .camera-modal-card {
   width: 840px !important;
   max-width: 95vw !important;
