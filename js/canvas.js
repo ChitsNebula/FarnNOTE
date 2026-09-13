@@ -56,6 +56,9 @@ window.CanvasEngine = class CanvasEngine {
     this.shapeHoldTimer = null;
     this.heldShape = null;
 
+    this._eraserUndoCaptured = false;
+    this._hasErasedSomething = false;
+
     this.bindKeyboardShortcuts();
 
 
@@ -1028,10 +1031,10 @@ window.CanvasEngine = class CanvasEngine {
 
 
       // SAVE UNDO SNAPSHOT BEFORE NEW DRAWING ACTION BEGINS!
+      // (Eraser is handled lazily inside eraseStrokesAndImagesAtPoint to prevent synchronous freeze!)
       if (window.ToolState.currentTool === 'pen' || 
           window.ToolState.currentTool === 'highlighter' || 
           window.ToolState.currentTool === 'pencil' || 
-          window.ToolState.currentTool === 'eraser' || 
           window.ToolState.currentTool === 'shape') {
         this.onBeforePageModified(view.index);
       }
@@ -1130,6 +1133,12 @@ window.CanvasEngine = class CanvasEngine {
       }
 
       if (window.ToolState.currentTool === 'eraser') {
+        this._eraserUndoCaptured = false;
+        this._hasErasedSomething = false;
+        this.activePageIndex = view.index;
+        this.isDrawing = true;
+        target.setPointerCapture(e.pointerId);
+        if (e.cancelable) e.preventDefault();
         this.eraseStrokesAndImagesAtPoint(view, pt);
         if (window.ToolState.eraserMode === 'pixel') {
           this.pixelErase(view, pt);
@@ -1299,9 +1308,11 @@ window.CanvasEngine = class CanvasEngine {
       }
 
       if (window.ToolState.currentTool === 'eraser') {
-        this.eraseStrokesAndImagesAtPoint(view, pt);
-        if (window.ToolState.eraserMode === 'pixel') {
-          this.pixelErase(view, pt);
+        if (this.isDrawing) {
+          this.eraseStrokesAndImagesAtPoint(view, pt);
+          if (window.ToolState.eraserMode === 'pixel') {
+            this.pixelErase(view, pt);
+          }
         }
 
         // Draw eraser cursor circle on ui canvas so user can see eraser boundary
@@ -1449,6 +1460,9 @@ window.CanvasEngine = class CanvasEngine {
         this.isRotatingSelection = false;
         this.isDrawing = false;
         this.initSelectionState = null;
+        if (this.selectedStrokes) {
+          this.selectedStrokes.forEach(s => { s._box = null; });
+        }
 
         // Render everything cleanly to main layers
         this.renderPageStrokes(view);
@@ -1512,7 +1526,13 @@ window.CanvasEngine = class CanvasEngine {
 
       if (window.ToolState.currentTool === 'eraser') {
         this.clearLayer(view.uiCtx, view); // Clear eraser cursor circle
-        this.onPageModified(view.index);
+        this.isDrawing = false;
+        if (this._hasErasedSomething) {
+          this.renderPageStrokes(view); // Synchronous final render
+          this.onPageModified(view.index);
+          this._hasErasedSomething = false;
+        }
+        this._eraserUndoCaptured = false;
         this.restorePreviousToolIfEraser();
         return;
       }
@@ -2138,6 +2158,32 @@ window.CanvasEngine = class CanvasEngine {
     ctx.restore();
   }
 
+  getStrokeAABB(s) {
+    if (s._box) return s._box;
+    if (!s.points || s.points.length === 0) return null;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    const pts = s.points;
+    for (let i = 0; i < pts.length; i++) {
+      const px = pts[i].x;
+      const py = pts[i].y;
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (py < minY) minY = py;
+      if (py > maxY) maxY = py;
+    }
+    s._box = { minX, maxX, minY, maxY };
+    return s._box;
+  }
+
+  scheduleStrokeRedraw(view) {
+    if (view._strokeRedrawScheduled) return;
+    view._strokeRedrawScheduled = true;
+    requestAnimationFrame(() => {
+      view._strokeRedrawScheduled = false;
+      this.renderPageStrokes(view);
+    });
+  }
+
   renderPageStrokes(view) {
     this.clearLayer(view.strokeCtx, view);
     if (!view.pageData || !view.pageData.strokes) return;
@@ -2145,11 +2191,16 @@ window.CanvasEngine = class CanvasEngine {
   }
 
   pixelErase(view, pt) {
+    if (!this._eraserUndoCaptured) {
+      this._eraserUndoCaptured = true;
+      this.onBeforePageModified(view.index);
+    }
+    this._hasErasedSomething = true;
     const ctx = view.strokeCtx;
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
-    ctx.arc(pt.x, pt.y, window.ToolState.eraserSize, 0, Math.PI * 2);
+    ctx.arc(pt.x, pt.y, window.ToolState.eraserSize || 20, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -2157,17 +2208,35 @@ window.CanvasEngine = class CanvasEngine {
   eraseStrokesAndImagesAtPoint(view, pt) {
     if (!view.pageData) return;
     const radius = window.ToolState.eraserSize || 20;
-    let modified = false;
+    const r2 = radius * radius;
+    let strokesModified = false;
+    let imagesModified = false;
+    let textModified = false;
 
     if (view.pageData.strokes && view.pageData.strokes.length > 0) {
       const initialCount = view.pageData.strokes.length;
       view.pageData.strokes = view.pageData.strokes.filter(s => {
-        const hit = s.points.some(p => Math.hypot(p.x - pt.x, p.y - pt.y) < radius);
-        return !hit;
+        // 1. Fast AABB Bounding Box pre-check: rejects ~99% of non-colliding strokes instantly
+        const box = this.getStrokeAABB(s);
+        if (box) {
+          if (pt.x < box.minX - radius || pt.x > box.maxX + radius ||
+              pt.y < box.minY - radius || pt.y > box.maxY + radius) {
+            return true; // Keep stroke, outside bounds
+          }
+        }
+        // 2. Exact squared distance check on points (avoids heavy Math.hypot / sqrt)
+        const pts = s.points;
+        for (let i = 0; i < pts.length; i++) {
+          const dx = pts[i].x - pt.x;
+          const dy = pts[i].y - pt.y;
+          if (dx * dx + dy * dy <= r2) {
+            return false; // Hit! Delete stroke
+          }
+        }
+        return true;
       });
       if (view.pageData.strokes.length !== initialCount) {
-        this.renderPageStrokes(view);
-        modified = true;
+        strokesModified = true;
       }
     }
 
@@ -2179,8 +2248,7 @@ window.CanvasEngine = class CanvasEngine {
         return !hit;
       });
       if (view.pageData.images.length !== initialImgCount) {
-        this.renderPageImages(view);
-        modified = true;
+        imagesModified = true;
       }
     }
 
@@ -2189,21 +2257,36 @@ window.CanvasEngine = class CanvasEngine {
       view.pageData.textBoxes = view.pageData.textBoxes.filter(tb => {
         if (tb.state === 'editing') return true; // Don't erase text box while user is typing inside
 
-        const w = tb._el ? (tb._el.offsetWidth || 100) : Math.max(80, (tb.text || '').length * ((tb.fontSize || 18) * 0.6));
-        const h = tb._el ? (tb._el.offsetHeight || 40) : Math.max(30, (tb.fontSize || 18) * 1.5);
+        // Avoid layout thrashing: use cached tb.w / tb.h or lightweight formula
+        const w = tb.w || (tb._el ? (tb._el.offsetWidth || 100) : 100);
+        const h = tb.h || (tb._el ? (tb._el.offsetHeight || 40) : 40);
         
         const hit = (pt.x >= tb.x - radius && pt.x <= tb.x + w + radius && 
                      pt.y >= tb.y - radius && pt.y <= tb.y + h + radius);
         return !hit;
       });
       if (view.pageData.textBoxes.length !== initialBoxCount) {
-        this.renderPageTextOverlays(view);
-        modified = true;
+        textModified = true;
       }
     }
 
-    if (modified) {
-      this.onPageModified(view.index);
+    if (strokesModified || imagesModified || textModified) {
+      // Lazy Undo Capture: only snapshot when something is actually deleted!
+      if (!this._eraserUndoCaptured) {
+        this._eraserUndoCaptured = true;
+        this.onBeforePageModified(view.index);
+      }
+      this._hasErasedSomething = true;
+
+      if (strokesModified) {
+        this.scheduleStrokeRedraw(view);
+      }
+      if (imagesModified) {
+        this.renderPageImages(view);
+      }
+      if (textModified) {
+        this.renderPageTextOverlays(view);
+      }
     }
   }
 
@@ -3240,6 +3323,7 @@ window.CanvasEngine = class CanvasEngine {
           e.stopPropagation();
           // If Eraser tool is active, erase this text box immediately!
           if (window.ToolState.currentTool === 'eraser') {
+            this.onBeforePageModified(view.index);
             view.pageData.textBoxes = view.pageData.textBoxes.filter(t => t.id !== tb.id);
             this.renderPageTextOverlays(view);
             this.onPageModified(view.index);
