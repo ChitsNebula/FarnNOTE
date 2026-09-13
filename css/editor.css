@@ -2135,6 +2135,88 @@
   object-fit: cover !important;
 }
 
+/* Camera Fallback Card (Chromebook / Web Permissions Blocked) */
+.camera-fallback-card {
+  position: absolute !important;
+  inset: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 32px 24px !important;
+  background: radial-gradient(circle at center, #2C2C2E 0%, #1C1C1E 100%) !important;
+  color: #FFFFFF !important;
+  text-align: center !important;
+  z-index: 5 !important;
+}
+
+.camera-fallback-icon {
+  font-size: 50px !important;
+  color: #FF9500 !important;
+  margin-bottom: 16px !important;
+  animation: pulseCameraIcon 2s infinite ease-in-out;
+}
+
+@keyframes pulseCameraIcon {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+.camera-fallback-card h4 {
+  font-size: 19px !important;
+  font-weight: 700 !important;
+  margin: 0 0 10px 0 !important;
+  color: #FFFFFF !important;
+}
+
+.camera-fallback-card p {
+  font-size: 13.5px !important;
+  line-height: 1.6 !important;
+  color: #AEAEB2 !important;
+  margin: 0 0 24px 0 !important;
+  max-width: 480px !important;
+}
+
+.camera-fallback-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 14px !important;
+  justify-content: center !important;
+}
+
+.camera-fallback-actions .btn-primary {
+  background: linear-gradient(135deg, #FF9500, #FF3B30) !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  padding: 12px 22px !important;
+  border-radius: 24px !important;
+  border: none !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 15px rgba(255, 149, 0, 0.4) !important;
+  transition: transform 0.15s ease !important;
+}
+
+.camera-fallback-actions .btn-primary:active {
+  transform: scale(0.96) !important;
+}
+
+.camera-fallback-actions .btn-secondary {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  padding: 12px 20px !important;
+  border-radius: 24px !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  cursor: pointer !important;
+  transition: background 0.15s ease !important;
+}
+
+.camera-fallback-actions .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.22) !important;
+}
+
 .camera-modal-footer {
   display: flex !important;
   justify-content: space-between !important;

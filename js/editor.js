@@ -745,6 +745,12 @@ window.EditorController = class EditorController {
         const tool = btn.dataset.tool;
         if (!tool) return;
 
+        if (tool === 'camera') {
+          const btnCam = document.getElementById('btn-camera-capture');
+          if (btnCam) btnCam.click();
+          return;
+        }
+
         if (tool === 'image') {
           document.getElementById('image-file-input').click();
           return;
@@ -894,44 +900,157 @@ window.EditorController = class EditorController {
     const btnClose = document.getElementById('btn-close-camera');
     const btnShutter = document.getElementById('btn-camera-shutter');
     const btnSwitch = document.getElementById('btn-camera-switch');
+    const btnNative = document.getElementById('btn-camera-native');
+    const btnFallbackNative = document.getElementById('btn-camera-fallback-native');
+    const btnFallbackFile = document.getElementById('btn-camera-fallback-file');
+    const fallbackMsg = document.getElementById('camera-fallback-msg');
+    const cameraNativeInput = document.getElementById('camera-native-input');
     const videoEl = document.getElementById('camera-video');
     const snapshotCanvas = document.getElementById('camera-snapshot-canvas');
 
-    if (!btnCamera || !cameraModal || !videoEl) return;
+    if (!btnCamera || !cameraModal) return;
 
     let mediaStream = null;
     let currentFacingMode = 'environment';
 
     const stopStream = () => {
       if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream.getTracks().forEach(track => {
+          try { track.stop(); } catch (e) {}
+        });
         mediaStream = null;
       }
       if (videoEl) videoEl.srcObject = null;
     };
 
+    const showFallback = () => {
+      stopStream();
+      if (videoEl) videoEl.style.display = 'none';
+      if (fallbackMsg) fallbackMsg.style.display = 'flex';
+      if (btnShutter) btnShutter.style.display = 'none';
+      if (btnSwitch) btnSwitch.style.display = 'none';
+    };
+
+    const showLiveStream = () => {
+      if (videoEl) videoEl.style.display = 'block';
+      if (fallbackMsg) fallbackMsg.style.display = 'none';
+      if (btnShutter) btnShutter.style.display = 'inline-flex';
+      if (btnSwitch) btnSwitch.style.display = 'inline-flex';
+    };
+
     const startCamera = async (facingMode = 'environment') => {
       stopStream();
-      try {
-        const constraints = {
-          video: {
-            facingMode: { ideal: facingMode },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          },
-          audio: false
-        };
-        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-        videoEl.srcObject = mediaStream;
-        await videoEl.play();
-      } catch (err) {
-        console.error('Camera access error:', err);
-        if (window.CustomDialog) {
-          window.CustomDialog.alert('ไม่สามารถเข้าถึงกล้องได้', 'กรุณาอนุญาตการใช้งานกล้องในเบราว์เซอร์ของคุณ');
+      showLiveStream();
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn('getUserMedia is not supported on this browser/context');
+        showFallback();
+        return;
+      }
+
+      // Progressive Constraints Fallback:
+      // 1. Ideal facingMode at 720p (broadly supported across Chromebooks & webcams)
+      // 2. Ideal facingMode with no resolution restrictions
+      // 3. Any video source available { video: true }
+      const attempts = [
+        { video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        { video: { facingMode: { ideal: facingMode } }, audio: false },
+        { video: true, audio: false }
+      ];
+
+      let stream = null;
+      let lastErr = null;
+
+      for (const constraints of attempts) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          if (stream) break;
+        } catch (err) {
+          lastErr = err;
+          console.warn('getUserMedia attempt failed with constraints:', constraints, err);
         }
-        cameraModal.classList.add('hidden');
+      }
+
+      if (stream && videoEl) {
+        mediaStream = stream;
+        videoEl.srcObject = mediaStream;
+        try {
+          await videoEl.play();
+        } catch (playErr) {
+          console.warn('video play warning:', playErr);
+        }
+      } else {
+        console.error('All camera stream attempts failed:', lastErr);
+        showFallback();
       }
     };
+
+    const handleCapturedImage = (dataUrl) => {
+      stopStream();
+      cameraModal.classList.add('hidden');
+
+      if (window.imageCropper) {
+        window.imageCropper.open(dataUrl, (croppedUrl) => {
+          if (this.canvasEngine) {
+            this.saveUndoState(this.currentPageIndex);
+            this.canvasEngine.insertImageOverlay(this.canvasEngine.activePageIndex, croppedUrl);
+            
+            if (window.ToolState) window.ToolState.currentTool = 'lasso';
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            const lassoBtn = document.querySelector('.tool-btn[data-tool="lasso"]');
+            if (lassoBtn) lassoBtn.classList.add('active');
+
+            if (window.showToast) window.showToast('ครอบตัดและแทรกลงในโน้ตแล้ว');
+          }
+        });
+      } else if (this.canvasEngine) {
+        this.saveUndoState(this.currentPageIndex);
+        this.canvasEngine.insertImageOverlay(this.canvasEngine.activePageIndex, dataUrl);
+        
+        if (window.ToolState) window.ToolState.currentTool = 'lasso';
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        const lassoBtn = document.querySelector('.tool-btn[data-tool="lasso"]');
+        if (lassoBtn) lassoBtn.classList.add('active');
+
+        if (window.showToast) window.showToast('ถ่ายภาพและแทรกลงในโน้ตแล้ว');
+      }
+    };
+
+    // Camera Native Input listener (Device Camera App or File intent)
+    if (cameraNativeInput) {
+      cameraNativeInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          handleCapturedImage(evt.target.result);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+      });
+    }
+
+    if (btnNative) {
+      this.bindInstantTap(btnNative, () => {
+        if (cameraNativeInput) cameraNativeInput.click();
+      });
+    }
+
+    if (btnFallbackNative) {
+      this.bindInstantTap(btnFallbackNative, () => {
+        if (cameraNativeInput) cameraNativeInput.click();
+      });
+    }
+
+    if (btnFallbackFile) {
+      this.bindInstantTap(btnFallbackFile, () => {
+        stopStream();
+        cameraModal.classList.add('hidden');
+        const imgInput = document.getElementById('image-file-input');
+        if (imgInput) imgInput.click();
+      });
+    }
 
     this.bindInstantTap(btnCamera, () => {
       cameraModal.classList.remove('hidden');
@@ -939,7 +1058,7 @@ window.EditorController = class EditorController {
     });
 
     if (btnClose) {
-      btnClose.addEventListener('click', () => {
+      this.bindInstantTap(btnClose, () => {
         stopStream();
         cameraModal.classList.add('hidden');
       });
@@ -953,15 +1072,15 @@ window.EditorController = class EditorController {
     });
 
     if (btnSwitch) {
-      btnSwitch.addEventListener('click', () => {
+      this.bindInstantTap(btnSwitch, () => {
         currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
         startCamera(currentFacingMode);
       });
     }
 
     if (btnShutter) {
-      btnShutter.addEventListener('click', () => {
-        if (!videoEl.videoWidth || !videoEl.videoHeight) return;
+      this.bindInstantTap(btnShutter, () => {
+        if (!videoEl || !videoEl.videoWidth || !videoEl.videoHeight) return;
 
         snapshotCanvas.width = videoEl.videoWidth;
         snapshotCanvas.height = videoEl.videoHeight;
@@ -970,35 +1089,7 @@ window.EditorController = class EditorController {
         ctx.drawImage(videoEl, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
 
         const dataUrl = snapshotCanvas.toDataURL('image/png');
-
-        stopStream();
-        cameraModal.classList.add('hidden');
-
-        if (window.imageCropper) {
-          window.imageCropper.open(dataUrl, (croppedUrl) => {
-            if (this.canvasEngine) {
-              this.saveUndoState(this.currentPageIndex);
-              this.canvasEngine.insertImageOverlay(this.canvasEngine.activePageIndex, croppedUrl);
-              
-              if (window.ToolState) window.ToolState.current = 'lasso';
-              document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-              const lassoBtn = document.querySelector('.tool-btn[data-tool="lasso"]');
-              if (lassoBtn) lassoBtn.classList.add('active');
-
-              if (window.showToast) window.showToast('ครอบตัดและแทรกลงในโน้ตแล้ว');
-            }
-          });
-        } else if (this.canvasEngine) {
-          this.saveUndoState(this.currentPageIndex);
-          this.canvasEngine.insertImageOverlay(this.canvasEngine.activePageIndex, dataUrl);
-          
-          if (window.ToolState) window.ToolState.current = 'lasso';
-          document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-          const lassoBtn = document.querySelector('.tool-btn[data-tool="lasso"]');
-          if (lassoBtn) lassoBtn.classList.add('active');
-
-          if (window.showToast) window.showToast('ถ่ายภาพและแทรกลงในโน้ตแล้ว');
-        }
+        handleCapturedImage(dataUrl);
       });
     }
   }

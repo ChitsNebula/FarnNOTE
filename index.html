@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="css/reset.css">
   <link rel="stylesheet" href="css/theme.css">
   <link rel="stylesheet" href="css/library.css">
-  <link rel="stylesheet" href="css/editor.css?v=2.11.1">
+  <link rel="stylesheet" href="css/editor.css?v=2.12.0">
 
   <!-- External Libraries: PDF.js & pdf-lib -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -30,7 +30,7 @@
   <!-- Auto-Purge Cache & Service Worker on Version Bump (Fixes Chromebook 403 & stale code) -->
   <script>
     (function() {
-      const APP_VER = '2.11.1';
+      const APP_VER = '2.12.0';
       if (localStorage.getItem('farmnotes_app_version') !== APP_VER) {
         localStorage.setItem('farmnotes_app_version', APP_VER);
         if ('caches' in window) {
@@ -244,6 +244,9 @@
               <i class="fa-solid fa-vector-square"></i>
             </button>
             <button class="tool-btn" data-tool="lens" title="Google Lens (ครอบเพื่อค้นหา)">
+              <i class="fa-solid fa-magnifying-glass-chart"></i>
+            </button>
+            <button class="tool-btn" data-tool="camera" id="tool-btn-camera" title="ถ่ายภาพจากกล้อง (Camera Capture)">
               <i class="fa-solid fa-camera"></i>
             </button>
             <button class="tool-btn" data-tool="text" title="กล่องข้อความ (Text Box)">
@@ -498,13 +501,30 @@
           <div class="camera-preview-container">
             <video id="camera-video" autoplay playsinline muted></video>
             <canvas id="camera-snapshot-canvas" style="display:none;"></canvas>
+
+            <div id="camera-fallback-msg" class="camera-fallback-card" style="display:none;">
+              <div class="camera-fallback-icon"><i class="fa-solid fa-camera-rotate"></i></div>
+              <h4>ไม่สามารถเปิดกล้องสด (Live Webcam) ได้</h4>
+              <p>เบราว์เซอร์ไม่ได้รับอนุญาต หรืออุปกรณ์ไม่มีกล้องเว็บแคมที่รองรับ<br>คุณสามารถใช้ <strong>แอปกล้องของเครื่อง</strong> ถ่ายภาพหรือเลือกรูปภาพแทนได้ทันที:</p>
+              <div class="camera-fallback-actions">
+                <button type="button" class="btn-primary" id="btn-camera-fallback-native">
+                  <i class="fa-solid fa-camera"></i> 📸 เปิดกล้องของเครื่องถ่ายภาพทันที
+                </button>
+                <button type="button" class="btn-secondary" id="btn-camera-fallback-file">
+                  <i class="fa-solid fa-image"></i> 🖼️ เลือกรูปภาพจากเครื่อง
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="modal-footer camera-modal-footer">
-          <button class="btn-secondary" id="btn-camera-switch" title="สลับกล้อง หน้า/หลัง">
+          <button type="button" class="btn-secondary" id="btn-camera-native" title="เปิดแอปกล้องถ่ายรูปของอุปกรณ์โดยตรง (ไม่ต้องขอสิทธิ์เบราว์เซอร์)">
+            <i class="fa-solid fa-camera"></i> ใช้กล้องของเครื่อง
+          </button>
+          <button type="button" class="btn-secondary" id="btn-camera-switch" title="สลับกล้อง หน้า/หลัง">
             <i class="fa-solid fa-camera-rotate"></i> สลับกล้อง
           </button>
-          <button class="btn-primary camera-shutter-btn" id="btn-camera-shutter">
+          <button type="button" class="btn-primary camera-shutter-btn" id="btn-camera-shutter">
             <i class="fa-solid fa-camera"></i> 📸 ถ่ายภาพและครอบตัดทันที
           </button>
         </div>
@@ -697,6 +717,7 @@
 
     <input type="file" id="pdf-file-input" accept="application/pdf" style="display:none;">
     <input type="file" id="image-file-input" accept="image/*" style="display:none;">
+    <input type="file" id="camera-native-input" accept="image/*" capture="environment" style="display:none;">
     <input type="file" id="cover-image-file-input" accept="image/*" style="display:none;">
     <input type="file" id="backup-file-input" accept=".farmnotes,.json" style="display:none;">
 
@@ -704,13 +725,13 @@
 
   <!-- Standard Application Scripts (No module / Works on file:// protocol!) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/tools.js?v=2.11.1"></script>
-  <script src="js/storage.js?v=2.11.1"></script>
-  <script src="js/canvas.js?v=2.11.1"></script>
-  <script src="js/pdf.js?v=2.11.1"></script>
-  <script src="js/library.js?v=2.11.1"></script>
-  <script src="js/editor.js?v=2.11.1"></script>
-  <script src="js/app.js?v=2.11.1"></script>
+  <script src="js/tools.js?v=2.12.0"></script>
+  <script src="js/storage.js?v=2.12.0"></script>
+  <script src="js/canvas.js?v=2.12.0"></script>
+  <script src="js/pdf.js?v=2.12.0"></script>
+  <script src="js/library.js?v=2.12.0"></script>
+  <script src="js/editor.js?v=2.12.0"></script>
+  <script src="js/app.js?v=2.12.0"></script>
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
       window.addEventListener('load', () => {
