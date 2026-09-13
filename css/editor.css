@@ -2143,7 +2143,7 @@
 .camera-fallback-card {
   position: absolute !important;
   inset: 0 !important;
-  display: flex !important;
+  display: none; /* Default hidden — JS controls via style.display */
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
