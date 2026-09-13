@@ -12,6 +12,27 @@ window.hexToRgba = function(hex, alpha = 0.4) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+// Immediate response on pointerdown for stylus/touch (eliminates jitter-induced click drops)
+window.bindInstantTap = function(el, callback) {
+  if (!el || typeof callback !== 'function') return;
+  let lastTrigger = 0;
+  const execute = (e) => {
+    const now = Date.now();
+    if (now - lastTrigger < 280) return; // Debounce synthetic duplicate events
+    lastTrigger = now;
+    callback(e);
+  };
+
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 && e.button !== undefined) return;
+    execute(e);
+  });
+
+  el.addEventListener('click', (e) => {
+    execute(e);
+  });
+};
+
 window.ToolState = {
   currentTool: 'pen', // 'pen', 'highlighter', 'pencil', 'eraser', 'shape', 'lasso', 'text', 'image', 'laser'
   penStyle: 'fountain', // 'fountain', 'ballpoint', 'brush'

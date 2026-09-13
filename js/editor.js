@@ -30,6 +30,9 @@ window.EditorController = class EditorController {
 
     window.editorApp = this;
     this.lastLensBlob = null;
+    this.bindInstantTap = window.bindInstantTap || function(el, cb) {
+      if (el) el.addEventListener('click', cb);
+    };
 
     this.canvasEngine = new window.CanvasEngine('canvas-pages-list', {
       onBeforePageModified: (pageIndex) => this.saveUndoState(pageIndex),
@@ -41,6 +44,14 @@ window.EditorController = class EditorController {
     });
 
     this.initEvents();
+  }
+
+  updatePageCounter() {
+    if (this.pageCounterText) {
+      const current = (this.currentPageIndex !== undefined ? this.currentPageIndex : 0) + 1;
+      const total = (this.pages && this.pages.length) ? this.pages.length : 1;
+      this.pageCounterText.innerText = `หน้า ${current} / ${total}`;
+    }
   }
 
 
@@ -468,6 +479,26 @@ window.EditorController = class EditorController {
   }
 
   initEvents() {
+    // Helper: Immediate response on pointerdown for stylus/touch (eliminates jitter-induced click drops)
+    const bindInstantTap = window.bindInstantTap || function(el, callback) {
+      if (!el || typeof callback !== 'function') return;
+      let lastTrigger = 0;
+      const execute = (e) => {
+        const now = Date.now();
+        if (now - lastTrigger < 280) return;
+        lastTrigger = now;
+        callback(e);
+      };
+      el.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 && e.button !== undefined) return;
+        execute(e);
+      });
+      el.addEventListener('click', (e) => {
+        execute(e);
+      });
+    };
+    this.bindInstantTap = bindInstantTap;
+
     this.initGoogleLensDrawer();
     this.initCalculator();
 
@@ -509,28 +540,6 @@ window.EditorController = class EditorController {
       }
     });
 
-    // Helper: Immediate response on pointerdown for stylus/touch (eliminates jitter-induced click drops)
-    const bindInstantTap = (el, callback) => {
-      if (!el) return;
-      let lastTrigger = 0;
-      const execute = (e) => {
-        const now = Date.now();
-        if (now - lastTrigger < 300) return; // Debounce synthetic clicks
-        lastTrigger = now;
-        callback(e);
-      };
-
-      el.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0 && e.button !== undefined) return;
-        execute(e);
-      });
-
-      el.addEventListener('click', (e) => {
-        execute(e);
-      });
-    };
-    this.bindInstantTap = bindInstantTap;
-
     bindInstantTap(document.getElementById('btn-undo'), () => this.undo());
     bindInstantTap(document.getElementById('btn-redo'), () => this.redo());
 
@@ -553,36 +562,64 @@ window.EditorController = class EditorController {
 
     const addPageHandler = async () => {
       this.saveUndoState(this.currentPageIndex);
-      const isLandscape = (this.currentNotebook && this.currentNotebook.orientation === 'landscape') ||
-                          (this.pages && this.pages.length > 0 && this.pages[0].width > this.pages[0].height);
-      const width = isLandscape ? 1123 : 794;
-      const height = isLandscape ? 794 : 1123;
+
+      const curPage = (this.pages && this.pages.length > 0) ? this.pages[this.currentPageIndex] : null;
+      const isLandscape = curPage
+        ? (curPage.width > curPage.height)
+        : ((this.currentNotebook && this.currentNotebook.orientation === 'landscape') || false);
+      const width  = curPage ? curPage.width  : (isLandscape ? 1123 : 794);
+      const height = curPage ? curPage.height : (isLandscape ? 794  : 1123);
+      const template = curPage ? (curPage.template || this.currentNotebook.template || 'grid') : (this.currentNotebook.template || 'grid');
+
+      // Insert immediately after current page!
+      const insertIndex = (this.pages && this.pages.length > 0) ? (this.currentPageIndex + 1) : 0;
 
       const newPage = {
         id: `page-${this.currentNotebook.id}-${Date.now()}`,
         notebookId: this.currentNotebook.id,
-        index: this.pages.length,
+        index: insertIndex,
         width,
         height,
-        template: this.currentNotebook.template || 'grid',
+        template,
         strokes: [],
         textBoxes: [],
         images: []
       };
-      await window.Storage.savePage(newPage);
-      this.pages.push(newPage);
+
+      this.pages.splice(insertIndex, 0, newPage);
+      this.pages.forEach((p, idx) => p.index = idx);
+
+      // Persist all shifted pages to IndexedDB
+      for (let i = insertIndex; i < this.pages.length; i++) {
+        await window.Storage.savePage(this.pages[i]);
+      }
+
+      if (this.currentNotebook) {
+        this.currentNotebook.pageCount = this.pages.length;
+        await window.Storage.saveNotebook(this.currentNotebook);
+      }
 
       await this.canvasEngine.loadPages(this.pages, window.Storage);
       this.renderThumbnails();
-      this.canvasEngine.scrollToPage(this.pages.length - 1);
+      this.updatePageCounter();
+      if (typeof this.renderPageOverviewGrid === 'function') {
+        this.renderPageOverviewGrid();
+      }
+      this.canvasEngine.scrollToPage(insertIndex);
+      this.handleActivePageChanged(insertIndex);
+
+      if (window.CustomDialog && window.CustomDialog.toast) {
+        window.CustomDialog.toast(`แทรกหน้า ${insertIndex + 1} จากทั้งหมด ${this.pages.length} หน้าสำเร็จ`, 1800);
+      }
+
       // No auto-save — user saves manually
       if (this.saveStatus) {
         this.saveStatus.innerHTML = '<i class="fa-solid fa-circle-dot" style="color:#FF9500"></i> ยังไม่ได้บันทึก';
       }
     };
 
-    document.getElementById('btn-add-page-top').addEventListener('click', addPageHandler);
-    document.getElementById('btn-add-page-thumb').addEventListener('click', addPageHandler);
+    bindInstantTap(document.getElementById('btn-add-page-top'), addPageHandler);
+    bindInstantTap(document.getElementById('btn-add-page-thumb'), addPageHandler);
 
     document.getElementById('btn-zoom-in').addEventListener('click', () => {
       this.canvasEngine.setZoom(this.canvasEngine.zoom + 0.15);
@@ -1857,8 +1894,18 @@ window.EditorController = class EditorController {
     this.pages.splice(pageIndex + 1, 0, newPage);
     this.pages.forEach((p, idx) => p.index = idx);
 
-    await window.Storage.savePage(newPage);
+    for (let i = pageIndex + 1; i < this.pages.length; i++) {
+      await window.Storage.savePage(this.pages[i]);
+    }
+
+    if (this.currentNotebook) {
+      this.currentNotebook.pageCount = this.pages.length;
+      await window.Storage.saveNotebook(this.currentNotebook);
+    }
+
     await this.canvasEngine.loadPages(this.pages, window.Storage);
+    this.renderThumbnails();
+    this.updatePageCounter();
     this.renderPageOverviewGrid();
     this.autoSave();
   }

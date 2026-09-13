@@ -7,8 +7,17 @@ class App {
     this.libraryScreen = document.getElementById('library-screen');
     this.editorScreen = document.getElementById('editor-screen');
 
-    this.libraryController = new window.LibraryController(this);
-    this.editorController = new window.EditorController(this);
+    try {
+      this.libraryController = new window.LibraryController(this);
+    } catch (err) {
+      console.error('LibraryController init error:', err);
+    }
+
+    try {
+      this.editorController = new window.EditorController(this);
+    } catch (err) {
+      console.error('EditorController init error:', err);
+    }
 
     this.init();
   }
@@ -16,7 +25,6 @@ class App {
   async init() {
     try {
       await window.Storage.seedInitialSampleDataIfEmpty();
-      await this.libraryController.loadLibrary();
       this.showLibrary();
     } catch (err) {
       console.error('App initialization error:', err);
@@ -24,15 +32,21 @@ class App {
   }
 
   showLibrary() {
-    this.editorScreen.classList.remove('active');
-    this.libraryScreen.classList.add('active');
-    this.libraryController.loadLibrary();
+    if (this.editorScreen) this.editorScreen.classList.remove('active');
+    if (this.libraryScreen) this.libraryScreen.classList.add('active');
+    if (this.libraryController) {
+      this.libraryController.loadLibrary();
+    }
   }
 
   async openNotebook(notebookId) {
-    this.libraryScreen.classList.remove('active');
-    this.editorScreen.classList.add('active');
-    await this.editorController.openNotebook(notebookId);
+    if (this.libraryScreen) this.libraryScreen.classList.remove('active');
+    if (this.editorScreen) this.editorScreen.classList.add('active');
+    if (this.editorController && typeof this.editorController.openNotebook === 'function') {
+      await this.editorController.openNotebook(notebookId);
+    } else {
+      console.error('EditorController not ready to open notebook:', notebookId);
+    }
   }
 }
 
