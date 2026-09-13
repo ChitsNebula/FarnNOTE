@@ -745,16 +745,6 @@ window.EditorController = class EditorController {
         const tool = btn.dataset.tool;
         if (!tool) return;
 
-        if (tool === 'camera') {
-          if (typeof this.openCameraCapture === 'function') {
-            this.openCameraCapture();
-          } else {
-            const btnCam = document.getElementById('btn-camera-capture');
-            if (btnCam) btnCam.click();
-          }
-          return;
-        }
-
         if (tool === 'image') {
           document.getElementById('image-file-input').click();
           return;
