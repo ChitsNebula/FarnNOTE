@@ -125,6 +125,10 @@
   gap: 4px;
   transition: all 0.2s ease-out;
   box-sizing: border-box;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Custom Thin Scrollbar for Floating Toolbar */
@@ -179,8 +183,8 @@
 
 .editor-toolbar.pos-right .tool-btn,
 .editor-toolbar.pos-left .tool-btn {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
 }
 
 .editor-toolbar.is-dragging {
@@ -286,6 +290,14 @@
   color: var(--gn-text-secondary);
   transition: all var(--transition-fast);
   position: relative;
+  touch-action: none !important;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: pointer;
+}
+.tool-btn > * {
+  pointer-events: none;
 }
 .tool-btn:hover {
   background-color: rgba(0, 0, 0, 0.05);
@@ -397,6 +409,10 @@
 .size-dot {
   position: relative;
   cursor: pointer;
+  touch-action: none !important;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Expanded 40px Touch Hit Area around color dots & wheel trigger (for easy tapping on touchscreen/stylus) */
@@ -453,6 +469,7 @@
 .size-dot span {
   background-color: var(--gn-text-secondary);
   border-radius: var(--radius-full);
+  pointer-events: none;
 }
 .size-dot.active {
   background-color: rgba(255, 149, 0, 0.15);

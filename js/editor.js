@@ -509,21 +509,43 @@ window.EditorController = class EditorController {
       }
     });
 
-    document.getElementById('btn-undo').addEventListener('click', () => this.undo());
-    document.getElementById('btn-redo').addEventListener('click', () => this.redo());
+    // Helper: Immediate response on pointerdown for stylus/touch (eliminates jitter-induced click drops)
+    const bindInstantTap = (el, callback) => {
+      if (!el) return;
+      let lastTrigger = 0;
+      const execute = (e) => {
+        const now = Date.now();
+        if (now - lastTrigger < 300) return; // Debounce synthetic clicks
+        lastTrigger = now;
+        callback(e);
+      };
+
+      el.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 && e.button !== undefined) return;
+        execute(e);
+      });
+
+      el.addEventListener('click', (e) => {
+        execute(e);
+      });
+    };
+    this.bindInstantTap = bindInstantTap;
+
+    bindInstantTap(document.getElementById('btn-undo'), () => this.undo());
+    bindInstantTap(document.getElementById('btn-redo'), () => this.redo());
 
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.key === 'z') { e.preventDefault(); this.undo(); }
       if (e.ctrlKey && e.key === 'y') { e.preventDefault(); this.redo(); }
     });
 
-    document.getElementById('btn-prev-page').addEventListener('click', () => {
+    bindInstantTap(document.getElementById('btn-prev-page'), () => {
       if (this.currentPageIndex > 0) {
         this.canvasEngine.scrollToPage(this.currentPageIndex - 1);
       }
     });
 
-    document.getElementById('btn-next-page').addEventListener('click', () => {
+    bindInstantTap(document.getElementById('btn-next-page'), () => {
       if (this.currentPageIndex < this.pages.length - 1) {
         this.canvasEngine.scrollToPage(this.currentPageIndex + 1);
       }
@@ -682,9 +704,10 @@ window.EditorController = class EditorController {
       }
     });
 
-    document.querySelectorAll('#main-toolbar .tool-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+    document.querySelectorAll('#main-toolbar .tool-btn[data-tool]').forEach(btn => {
+      bindInstantTap(btn, () => {
         const tool = btn.dataset.tool;
+        if (!tool) return;
 
         if (tool === 'image') {
           document.getElementById('image-file-input').click();
@@ -695,7 +718,7 @@ window.EditorController = class EditorController {
           this.canvasEngine.clearSelection();
         }
 
-        document.querySelectorAll('#main-toolbar .tool-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#main-toolbar .tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         window.ToolState.currentTool = tool;
 
@@ -711,7 +734,7 @@ window.EditorController = class EditorController {
 
     window.selectTool = (tool) => {
       window.ToolState.currentTool = tool;
-      document.querySelectorAll('#main-toolbar .tool-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#main-toolbar .tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
       const btn = document.querySelector(`#main-toolbar .tool-btn[data-tool="${tool}"]`);
       if (btn) btn.classList.add('active');
       this.updateToolbarSizeDots();
@@ -719,7 +742,7 @@ window.EditorController = class EditorController {
     };
 
     document.querySelectorAll('#quick-colors .color-dot').forEach(dot => {
-      dot.addEventListener('click', () => {
+      bindInstantTap(dot, () => {
         const hex = dot.dataset.color;
         const tool = window.ToolState.currentTool;
         if (tool === 'highlighter') {
@@ -753,7 +776,7 @@ window.EditorController = class EditorController {
 
 
     document.querySelectorAll('#quick-sizes .size-dot').forEach((dot, dotIdx) => {
-      dot.addEventListener('click', () => {
+      bindInstantTap(dot, () => {
         document.querySelectorAll('#quick-sizes .size-dot').forEach(d => d.classList.remove('active'));
         dot.classList.add('active');
 
@@ -874,7 +897,7 @@ window.EditorController = class EditorController {
       }
     };
 
-    btnCamera.addEventListener('click', () => {
+    this.bindInstantTap(btnCamera, () => {
       cameraModal.classList.remove('hidden');
       startCamera(currentFacingMode);
     });
@@ -1303,7 +1326,7 @@ window.EditorController = class EditorController {
     // ── Preset dots ──────────────────────────────────────────────────────────
 
     document.querySelectorAll('.cw-preset-dot').forEach(dot => {
-      dot.addEventListener('click', () => {
+      this.bindInstantTap(dot, () => {
         const hex = dot.dataset.color;
         hexInput.value = hex;
         applyBtn.click();
@@ -1312,8 +1335,8 @@ window.EditorController = class EditorController {
 
     // ── Toggle popover ────────────────────────────────────────────────────────
 
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
+    this.bindInstantTap(btn, (e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
       const isHidden = popover.classList.contains('hidden');
 
       if (isHidden) {
@@ -1956,8 +1979,8 @@ window.EditorController = class EditorController {
     calcWidget.classList.remove('docked-left');
     if (btnDock) btnDock.classList.add('active');
 
-    btnCalc.addEventListener('click', (e) => {
-      e.stopPropagation();
+    this.bindInstantTap(btnCalc, (e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
       calcWidget.classList.toggle('hidden');
       const isVisible = !calcWidget.classList.contains('hidden');
       btnCalc.classList.toggle('active', isVisible);
