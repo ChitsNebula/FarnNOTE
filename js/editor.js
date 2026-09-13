@@ -599,13 +599,12 @@ window.EditorController = class EditorController {
         await window.Storage.saveNotebook(this.currentNotebook);
       }
 
-      await this.canvasEngine.loadPages(this.pages, window.Storage);
+      await this.canvasEngine.loadPages(this.pages, window.Storage, insertIndex);
       this.renderThumbnails();
       this.updatePageCounter();
       if (typeof this.renderPageOverviewGrid === 'function') {
         this.renderPageOverviewGrid();
       }
-      this.canvasEngine.scrollToPage(insertIndex);
       this.handleActivePageChanged(insertIndex);
 
       if (window.CustomDialog && window.CustomDialog.toast) {
@@ -1903,10 +1902,11 @@ window.EditorController = class EditorController {
       await window.Storage.saveNotebook(this.currentNotebook);
     }
 
-    await this.canvasEngine.loadPages(this.pages, window.Storage);
+    await this.canvasEngine.loadPages(this.pages, window.Storage, pageIndex + 1);
     this.renderThumbnails();
     this.updatePageCounter();
     this.renderPageOverviewGrid();
+    this.handleActivePageChanged(pageIndex + 1);
     this.autoSave();
   }
 
@@ -1931,9 +1931,11 @@ window.EditorController = class EditorController {
       await window.Storage.saveNotebook(this.currentNotebook);
     }
 
-    await this.canvasEngine.loadPages(this.pages, window.Storage);
+    await this.canvasEngine.loadPages(this.pages, window.Storage, pageIndex + 1);
+    this.renderThumbnails();
     this.updatePageCounter();
     this.renderPageOverviewGrid();
+    this.handleActivePageChanged(pageIndex + 1);
     this.autoSave();
 
     if (window.CustomDialog && window.CustomDialog.toast) {

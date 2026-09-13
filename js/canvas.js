@@ -302,7 +302,7 @@ window.CanvasEngine = class CanvasEngine {
 
 
 
-  async loadPages(pages, storage) {
+  async loadPages(pages, storage, initialPageIndex = 0) {
     if (this.pageViews && this.pageViews.length) {
       this.pageViews.forEach(v => {
         if (v._blobUrl) {
@@ -407,10 +407,16 @@ window.CanvasEngine = class CanvasEngine {
     // ────────────────────────────────────────────────────────────────────────────
 
 
-    // Phase 3: Eagerly initialize page 1 (and page 2) RIGHT NOW so screen is never blank
-    await this._initPageCanvases(this.pageViews[0]);
-    if (this.pageViews.length > 1) {
-      this._initPageCanvases(this.pageViews[1]); // async, no await
+    // Phase 3: Eagerly initialize target page (and adjacent pages) RIGHT NOW so screen is never blank
+    const startIdx = Math.max(0, Math.min(this.pageViews.length - 1, initialPageIndex || 0));
+    if (this.pageViews[startIdx]) {
+      await this._initPageCanvases(this.pageViews[startIdx]);
+    }
+    if (this.pageViews[startIdx + 1]) {
+      this._initPageCanvases(this.pageViews[startIdx + 1]); // async, no await
+    }
+    if (startIdx > 0 && this.pageViews[startIdx - 1]) {
+      this._initPageCanvases(this.pageViews[startIdx - 1]); // async, no await
     }
 
     // Auto-fit zoom if document contains landscape or wide pages
@@ -421,9 +427,10 @@ window.CanvasEngine = class CanvasEngine {
       this.onZoomChanged(this.zoom);
     }
 
+    this.activePageIndex = startIdx;
     this.updateActivePageOnScroll();
 
-    // Center viewport on Page 1 after layout settles
+    // Center viewport on target page after layout settles
     requestAnimationFrame(() => {
       if (!this.viewport) return;
       this._updateViewportPadding();
@@ -436,14 +443,21 @@ window.CanvasEngine = class CanvasEngine {
         const maxScrollX = this.viewport.scrollWidth - this.viewport.clientWidth;
         this.viewport.scrollLeft = Math.max(0, maxScrollX / 2);
 
-        // Vertical: jump to just above page 1 (within top padding area)
-        const firstContainer = this.pageViews[0] && this.pageViews[0].container;
-        if (firstContainer) {
-          // offsetTop is relative to pagesListContainer which starts at paddingTop of viewport
-          const vPad = parseInt(this.viewport.style.paddingTop || '300', 10);
-          this.viewport.scrollTop = Math.max(0, vPad - 30);
+        // Vertical: jump to target page
+        if (startIdx === 0) {
+          const firstContainer = this.pageViews[0] && this.pageViews[0].container;
+          if (firstContainer) {
+            const vPad = parseInt(this.viewport.style.paddingTop || '300', 10);
+            this.viewport.scrollTop = Math.max(0, vPad - 30);
+          }
+        } else {
+          const targetContainer = this.pageViews[startIdx] && this.pageViews[startIdx].container;
+          if (targetContainer) {
+            targetContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         }
 
+        this.activePageIndex = startIdx;
         this.updateActivePageOnScroll();
       });
     });
