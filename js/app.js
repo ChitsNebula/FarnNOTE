@@ -30,6 +30,10 @@ class App {
       if (window.WakeLockManager && typeof window.WakeLockManager.init === 'function') {
         window.WakeLockManager.init();
       }
+
+      if (window.ClassroomExplorer && typeof window.ClassroomExplorer.init === 'function') {
+        window.ClassroomExplorer.init(this);
+      }
     } catch (err) {
       console.error('App initialization error:', err);
     }
