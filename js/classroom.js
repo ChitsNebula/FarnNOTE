@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FarmNotes — Google Classroom Explorer Engine (v2.13.0)
  * Direct Integration with Google Classroom API & Google Drive API
  * Allows students to browse courses, view materials & assignments, and 1-click import PDFs into notebooks
@@ -11,13 +11,22 @@
     constructor() {
       this.app = null;
       this.clientId = localStorage.getItem('farmnotes_google_client_id') || '';
-      this.accessToken = null;
-      this.tokenExpiresAt = 0;
-      this.currentUser = null;
-      this.tokenClient = null;
-
-      this.coursesCache = [];
+      this.accessToken = localStorage.getItem('farmnotes_google_access_token') || null;
+      this.tokenExpiresAt = parseInt(localStorage.getItem('farmnotes_google_token_expires_at') || '0', 10);
+      try {
+        const savedUser = localStorage.getItem('farmnotes_google_user_profile');
+        this.currentUser = savedUser ? JSON.parse(savedUser) : null;
+      } catch (e) {
+        this.currentUser = null;
+      }
+      try {
+        const savedCourses = localStorage.getItem('farmnotes_google_courses_cache');
+        this.coursesCache = savedCourses ? JSON.parse(savedCourses) : [];
+      } catch (e) {
+        this.coursesCache = [];
+      }
       this.currentCourse = null;
+      this.tokenClient = null;
 
       // DOM Elements
       this.modal = null;
@@ -35,6 +44,10 @@
       // Check if Client ID exists
       if (this.clientId) {
         this.initGisTokenClient();
+        // If user was previously logged in, auto-refresh token silently in background on startup
+        if (this.currentUser && (!this.accessToken || Date.now() > this.tokenExpiresAt - 120000)) {
+          setTimeout(() => this.trySilentRefresh(), 1200);
+        }
       }
     }
 
@@ -169,20 +182,42 @@
           ].join(' '),
           callback: (tokenResponse) => {
             if (tokenResponse.error) {
-              console.error('GIS Error:', tokenResponse);
-              this.showToast('เกิดข้อผิดพลาดในการเข้าสู่ระบบ: ' + tokenResponse.error, 3500);
+              console.warn('GIS Token Error:', tokenResponse);
+              if (tokenResponse.error !== 'silent_login_failed' && tokenResponse.error !== 'interaction_required') {
+                this.showToast('การเข้าสู่ระบบไม่สำเร็จ: ' + tokenResponse.error, 3500);
+              }
               return;
             }
             this.accessToken = tokenResponse.access_token;
             this.tokenExpiresAt = Date.now() + (parseInt(tokenResponse.expires_in, 10) || 3600) * 1000;
+            localStorage.setItem('farmnotes_google_access_token', this.accessToken);
+            localStorage.setItem('farmnotes_google_token_expires_at', this.tokenExpiresAt.toString());
             this.fetchUserProfile();
-            this.loadCourses();
+            this.loadCourses(true);
           }
         });
         return true;
       } catch (err) {
         console.error('Failed to init GIS token client:', err);
         return false;
+      }
+    }
+
+    trySilentRefresh() {
+      if (!this.clientId) return;
+      if (!this.tokenClient) {
+        this.initGisTokenClient();
+      }
+      if (this.tokenClient) {
+        try {
+          const req = { prompt: '' };
+          if (this.currentUser && this.currentUser.email) {
+            req.hint = this.currentUser.email;
+          }
+          this.tokenClient.requestAccessToken(req);
+        } catch (e) {
+          console.warn('Silent refresh error:', e);
+        }
       }
     }
 
@@ -219,24 +254,36 @@
         return;
       }
 
-      if (!this.accessToken || Date.now() > this.tokenExpiresAt) {
-        // Needs login
+      const isTokenValid = this.accessToken && Date.now() < this.tokenExpiresAt;
+
+      // If token expired or expiring soon, auto silent refresh
+      if (!isTokenValid && this.currentUser) {
+        this.trySilentRefresh();
+      }
+
+      if (!isTokenValid && !this.currentUser) {
+        // Not logged in at all
         this.updateAccountBadge(null);
         this.showView('courses');
         this.renderLoggedOutState();
         return;
       }
 
-      // Logged in
+      // Logged in (active or using cached session with background refresh)
       this.updateAccountBadge(this.currentUser);
       if (this.currentCourse) {
         this.showView('materials');
       } else {
         this.showView('courses');
-        if (this.coursesCache.length === 0) {
+        if (this.coursesCache && this.coursesCache.length > 0) {
+          this.renderCourses(this.coursesCache);
+          if (isTokenValid) {
+            this.loadCourses(true); // background silent sync
+          }
+        } else if (isTokenValid) {
           this.loadCourses();
         } else {
-          this.renderCourses(this.coursesCache);
+          this.renderLoggedOutState();
         }
       }
     }
@@ -297,7 +344,7 @@
       }
     }
 
-    requestLogin() {
+    requestLogin(forceSelect = false) {
       if (!this.clientId) {
         this.showView('setup');
         return;
@@ -309,18 +356,28 @@
           return;
         }
       }
-      this.tokenClient.requestAccessToken({ prompt: 'select_account' });
+      const req = { prompt: forceSelect ? 'select_account' : '' };
+      if (this.currentUser && this.currentUser.email && !forceSelect) {
+        req.hint = this.currentUser.email;
+      }
+      this.tokenClient.requestAccessToken(req);
     }
 
     logout() {
       if (this.accessToken && window.google && window.google.accounts && window.google.accounts.oauth2) {
-        window.google.accounts.oauth2.revoke(this.accessToken, () => {});
+        try {
+          window.google.accounts.oauth2.revoke(this.accessToken, () => {});
+        } catch (e) {}
       }
       this.accessToken = null;
       this.tokenExpiresAt = 0;
       this.currentUser = null;
       this.coursesCache = [];
       this.currentCourse = null;
+      localStorage.removeItem('farmnotes_google_access_token');
+      localStorage.removeItem('farmnotes_google_token_expires_at');
+      localStorage.removeItem('farmnotes_google_user_profile');
+      localStorage.removeItem('farmnotes_google_courses_cache');
       this.showToast('ออกจากระบบเรียบร้อยแล้ว', 2000);
       this.render();
     }
@@ -333,6 +390,7 @@
         });
         if (res.ok) {
           this.currentUser = await res.json();
+          localStorage.setItem('farmnotes_google_user_profile', JSON.stringify(this.currentUser));
           this.updateAccountBadge(this.currentUser);
         }
       } catch (e) {
@@ -340,13 +398,13 @@
       }
     }
 
-    async loadCourses() {
+    async loadCourses(silent = false) {
       if (!this.accessToken) {
-        this.renderLoggedOutState();
+        if (!silent) this.renderLoggedOutState();
         return;
       }
 
-      if (this.coursesListEl) {
+      if (!silent && this.coursesListEl) {
         this.coursesListEl.innerHTML = `
           <div class="cr-loading-state">
             <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
@@ -361,16 +419,23 @@
         });
 
         if (!res.ok) {
+          if (res.status === 401) {
+            this.accessToken = null;
+            localStorage.removeItem('farmnotes_google_access_token');
+            this.trySilentRefresh();
+            return;
+          }
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.error?.message || `HTTP ${res.status}`);
         }
 
         const data = await res.json();
         this.coursesCache = data.courses || [];
+        localStorage.setItem('farmnotes_google_courses_cache', JSON.stringify(this.coursesCache));
         this.renderCourses(this.coursesCache);
       } catch (err) {
         console.error('Error loading courses:', err);
-        if (this.coursesListEl) {
+        if (!silent && this.coursesListEl) {
           this.coursesListEl.innerHTML = `
             <div class="cr-error-state">
               <i class="fa-solid fa-triangle-exclamation fa-2x"></i>
