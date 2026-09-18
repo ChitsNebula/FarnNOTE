@@ -1164,7 +1164,7 @@ window.EditorController = class EditorController {
     let isDragging = false;
     let startX = 0, startY = 0;
     let moveDist = 0;
-    let targetZone = 'right';
+    let targetZone = 'top';
     let activePointerId = null;
 
     const getClosestZone = (clientX, clientY) => {
@@ -1254,13 +1254,13 @@ window.EditorController = class EditorController {
       toolbarEl.classList.remove('is-dragging');
 
       if (moveDist < 5) {
-        // Simple click without dragging -> cycle positions (right -> top -> left -> right)
-        if (toolbarEl.classList.contains('pos-right')) {
-          toolbarEl.className = 'editor-toolbar pos-top';
-        } else if (toolbarEl.classList.contains('pos-top')) {
+        // Simple click without dragging -> cycle positions (top -> right -> left -> top)
+        if (toolbarEl.classList.contains('pos-top')) {
+          toolbarEl.className = 'editor-toolbar pos-right';
+        } else if (toolbarEl.classList.contains('pos-right')) {
           toolbarEl.className = 'editor-toolbar pos-left';
         } else {
-          toolbarEl.className = 'editor-toolbar pos-right';
+          toolbarEl.className = 'editor-toolbar pos-top';
         }
       } else {
         // Dragged -> Apply target snap zone immediately without any jitter!
