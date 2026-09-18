@@ -18,10 +18,10 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- App Stylesheets -->
-  <link rel="stylesheet" href="css/reset.css?v=2.13.1">
-  <link rel="stylesheet" href="css/theme.css?v=2.13.1">
-  <link rel="stylesheet" href="css/library.css?v=2.13.1">
-  <link rel="stylesheet" href="css/editor.css?v=2.13.1">
+  <link rel="stylesheet" href="css/reset.css?v=2.13.2">
+  <link rel="stylesheet" href="css/theme.css?v=2.13.2">
+  <link rel="stylesheet" href="css/library.css?v=2.13.2">
+  <link rel="stylesheet" href="css/editor.css?v=2.13.2">
 
   <!-- External Libraries: Google Identity Services, PDF.js & pdf-lib -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -31,7 +31,7 @@
   <!-- Auto-Purge Cache & Service Worker on Version Bump (Fixes Chromebook 403 & stale code) -->
   <script>
     (function() {
-      const APP_VER = '2.13.1';
+      const APP_VER = '2.13.2';
       if (localStorage.getItem('farmnotes_app_version') !== APP_VER) {
         localStorage.setItem('farmnotes_app_version', APP_VER);
         if ('caches' in window) {
@@ -83,6 +83,9 @@
           
           <div class="sidebar-section-header">
             <span>กลุ่ม / โฟลเดอร์</span>
+            <button class="btn-sidebar-add-group" id="btn-new-group-sidebar" title="สร้างกลุ่ม/โฟลเดอร์ใหม่">
+              <i class="fa-solid fa-plus"></i>
+            </button>
           </div>
 
           <div id="sidebar-groups-list" class="sidebar-groups-list">
@@ -110,33 +113,96 @@
           </div>
 
           <div class="header-actions">
-            <button class="btn-icon" id="btn-check-update" title="ตรวจหาและอัปเดตเวอร์ชันใหม่">
-              <i class="fa-solid fa-arrows-rotate" id="update-btn-icon"></i>
-            </button>
-            <button class="btn-icon" id="btn-library-fullscreen" title="เต็มหน้าจอ (F11)">
-              <i class="fa-solid fa-expand" id="library-fullscreen-icon"></i>
-            </button>
+            <!-- View Toggle Button (Grid / List) -->
             <button class="btn-icon" id="btn-toggle-view" title="เปลี่ยนมุมมอง (Grid/List)">
               <i class="fa-solid fa-border-all"></i>
             </button>
-            <button class="btn-icon" id="btn-backup-data" title="สำรองข้อมูลทั้งหมด (ส่งออกไฟล์เก็บไว้)">
-              <i class="fa-solid fa-cloud-arrow-down"></i>
-            </button>
-            <button class="btn-icon" id="btn-restore-data" title="กู้คืนข้อมูล / นำเข้าสมุดโน้ต (นำไฟล์สำรองมาย้ายลงเครื่องนี้)">
-              <i class="fa-solid fa-cloud-arrow-up"></i>
-            </button>
-            <button class="btn-secondary" id="btn-new-group">
-              <i class="fa-solid fa-folder-plus"></i> กลุ่ม/โฟลเดอร์ใหม่
-            </button>
-            <button class="btn-primary" id="btn-new-notebook">
-              <i class="fa-solid fa-plus"></i> สมุดโน้ตใหม่
-            </button>
-            <button class="btn-secondary" id="btn-import-pdf">
-              <i class="fa-solid fa-file-arrow-up"></i> นำเข้า PDF
-            </button>
-            <button class="btn-classroom" id="btn-open-classroom" title="เปิด Google Classroom เพื่อเลือกวิชาและนำเข้าชีทเรียน">
-              <i class="fa-solid fa-graduation-cap"></i> Google Classroom
-            </button>
+
+            <!-- More Options Menu (Backup, Restore, Update, Fullscreen) -->
+            <div class="header-dropdown-wrap" id="wrap-library-more">
+              <button class="btn-icon" id="btn-library-more" title="ตัวเลือกเพิ่มเติมและการสำรองข้อมูล">
+                <i class="fa-solid fa-ellipsis-vertical"></i>
+              </button>
+              <div class="header-popover-menu hidden" id="menu-library-more">
+                <button class="header-menu-item" id="btn-backup-data">
+                  <i class="fa-solid fa-cloud-arrow-down icon-backup"></i>
+                  <div class="menu-item-text">
+                    <span class="menu-item-title">สำรองข้อมูลทั้งหมด</span>
+                    <span class="menu-item-desc">ส่งออกไฟล์สำรองเก็บไว้ในเครื่อง</span>
+                  </div>
+                </button>
+                <button class="header-menu-item" id="btn-restore-data">
+                  <i class="fa-solid fa-cloud-arrow-up icon-restore"></i>
+                  <div class="menu-item-text">
+                    <span class="menu-item-title">กู้คืนข้อมูล</span>
+                    <span class="menu-item-desc">นำเข้าไฟล์สำรองมาย้ายลงเครื่องนี้</span>
+                  </div>
+                </button>
+                <div class="header-menu-divider"></div>
+                <button class="header-menu-item" id="btn-check-update">
+                  <i class="fa-solid fa-arrows-rotate icon-update" id="update-btn-icon"></i>
+                  <div class="menu-item-text">
+                    <span class="menu-item-title">ตรวจหาการอัปเดต</span>
+                    <span class="menu-item-desc">ล้างแคชและอัปเดตเป็นเวอร์ชันล่าสุด</span>
+                  </div>
+                </button>
+                <button class="header-menu-item" id="btn-library-fullscreen">
+                  <i class="fa-solid fa-expand icon-fs" id="library-fullscreen-icon"></i>
+                  <div class="menu-item-text">
+                    <span class="menu-item-title">เต็มหน้าจอ (F11)</span>
+                    <span class="menu-item-desc">ขยายหน้าจอสมุดโน้ตเต็มพื้นที่</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Primary Create / Import Dropdown Button -->
+            <div class="header-dropdown-wrap" id="wrap-library-create">
+              <button class="btn-primary btn-create-dropdown" id="btn-create-menu" title="สร้างสมุดโน้ตหรือนำเข้าเอกสาร">
+                <i class="fa-solid fa-plus"></i>
+                <span>สร้างใหม่</span>
+                <i class="fa-solid fa-chevron-down create-chevron" id="create-chevron-icon"></i>
+              </button>
+              <div class="header-popover-menu header-create-popover hidden" id="menu-library-create">
+                <button class="header-menu-item" id="btn-new-notebook">
+                  <div class="menu-item-icon-box bg-orange-soft">
+                    <i class="fa-solid fa-book-open text-orange"></i>
+                  </div>
+                  <div class="menu-item-text">
+                    <span class="menu-item-title">สมุดโน้ตใหม่</span>
+                    <span class="menu-item-desc">สร้างสมุดเปล่า เลือกหน้าปกและลายกระดาษ</span>
+                  </div>
+                </button>
+                <button class="header-menu-item" id="btn-new-group">
+                  <div class="menu-item-icon-box bg-blue-soft">
+                    <i class="fa-solid fa-folder-plus text-blue"></i>
+                  </div>
+                  <div class="menu-item-text">
+                    <span class="menu-item-title">กลุ่ม / โฟลเดอร์ใหม่</span>
+                    <span class="menu-item-desc">สร้างหมวดหมู่วิชาสำหรับแยกสมุดโน้ต</span>
+                  </div>
+                </button>
+                <div class="header-menu-divider"></div>
+                <button class="header-menu-item" id="btn-import-pdf">
+                  <div class="menu-item-icon-box bg-red-soft">
+                    <i class="fa-solid fa-file-pdf text-red"></i>
+                  </div>
+                  <div class="menu-item-text">
+                    <span class="menu-item-title">นำเข้าไฟล์ PDF</span>
+                    <span class="menu-item-desc">เปิดและขีดเขียนบนไฟล์เอกสารจากเครื่อง</span>
+                  </div>
+                </button>
+                <button class="header-menu-item" id="btn-open-classroom">
+                  <div class="menu-item-icon-box bg-green-soft">
+                    <i class="fa-solid fa-graduation-cap text-green"></i>
+                  </div>
+                  <div class="menu-item-text">
+                    <span class="menu-item-title">Google Classroom</span>
+                    <span class="menu-item-desc">ดึงชีทเรียนและสไลด์จากวิชาเรียนโดยตรง</span>
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
         </header>
 

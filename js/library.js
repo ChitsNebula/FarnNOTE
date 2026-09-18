@@ -545,14 +545,79 @@ window.LibraryController = class LibraryController {
       });
     });
 
-    document.getElementById('btn-new-notebook').addEventListener('click', () => {
-      this.selectedCoverImage = null;
-      this.modalNewNotebook.classList.remove('hidden');
+    // ── Header Dropdown Menus (Create & More Options) ─────────────────────────
+    const btnCreateMenu = document.getElementById('btn-create-menu');
+    const menuCreate = document.getElementById('menu-library-create');
+    const chevronCreate = document.getElementById('create-chevron-icon');
+
+    const btnMoreMenu = document.getElementById('btn-library-more');
+    const menuMore = document.getElementById('menu-library-more');
+
+    const closeAllHeaderDropdowns = () => {
+      if (menuCreate) menuCreate.classList.add('hidden');
+      if (chevronCreate) chevronCreate.classList.remove('open');
+      if (menuMore) menuMore.classList.add('hidden');
+    };
+
+    if (btnCreateMenu && menuCreate) {
+      btnCreateMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = menuCreate.classList.contains('hidden');
+        closeAllHeaderDropdowns();
+        if (willOpen) {
+          menuCreate.classList.remove('hidden');
+          if (chevronCreate) chevronCreate.classList.add('open');
+        }
+      });
+    }
+
+    if (btnMoreMenu && menuMore) {
+      btnMoreMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = menuMore.classList.contains('hidden');
+        closeAllHeaderDropdowns();
+        if (willOpen) {
+          menuMore.classList.remove('hidden');
+        }
+      });
+    }
+
+    // Close header dropdowns when clicking outside or clicking any menu item
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#wrap-library-create') && !e.target.closest('#wrap-library-more')) {
+        closeAllHeaderDropdowns();
+      }
     });
 
-    document.getElementById('btn-new-group').addEventListener('click', () => {
-      this.promptNewGroup();
+    document.querySelectorAll('.header-menu-item').forEach(item => {
+      item.addEventListener('click', () => {
+        closeAllHeaderDropdowns();
+      });
     });
+
+    // Sidebar quick add folder button
+    const btnSidebarAddGroup = document.getElementById('btn-new-group-sidebar');
+    if (btnSidebarAddGroup) {
+      btnSidebarAddGroup.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.promptNewGroup();
+      });
+    }
+
+    const btnNewNb = document.getElementById('btn-new-notebook');
+    if (btnNewNb) {
+      btnNewNb.addEventListener('click', () => {
+        this.selectedCoverImage = null;
+        this.modalNewNotebook.classList.remove('hidden');
+      });
+    }
+
+    const btnNewGrp = document.getElementById('btn-new-group');
+    if (btnNewGrp) {
+      btnNewGrp.addEventListener('click', () => {
+        this.promptNewGroup();
+      });
+    }
 
     document.querySelectorAll('.close-modal').forEach(btn => {
       btn.addEventListener('click', () => this.modalNewNotebook.classList.add('hidden'));
