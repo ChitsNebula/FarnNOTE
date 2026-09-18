@@ -203,6 +203,8 @@
 }
 
 .library-header {
+  position: relative;
+  z-index: 100;
   height: 64px;
   padding: 0 28px;
   display: flex;

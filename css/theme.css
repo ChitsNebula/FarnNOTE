@@ -640,3 +640,8 @@
 .icon-update  { color: #FF9500; font-size: 15px; width: 24px; text-align: center; }
 .icon-fs      { color: #5856D6; font-size: 15px; width: 24px; text-align: center; }
 
+.library-header {
+  position: relative !important;
+  z-index: 100 !important;
+}
+
