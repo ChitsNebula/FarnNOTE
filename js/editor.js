@@ -82,20 +82,38 @@ window.EditorController = class EditorController {
       this.pages = [page];
     }
 
-    this.currentPageIndex = 0;
-    this.pageCounterText.innerText = `หน้า 1 / ${this.pages.length}`;
+    let savedPageIndex = 0;
+    try {
+      const lsVal = localStorage.getItem(`farmnotes_last_page_${notebookId}`);
+      if (lsVal !== null) {
+        savedPageIndex = parseInt(lsVal, 10);
+      } else if (this.currentNotebook.lastPageIndex !== undefined) {
+        savedPageIndex = this.currentNotebook.lastPageIndex;
+      }
+    } catch (e) {}
+
+    const targetPageIndex = (!isNaN(savedPageIndex) && savedPageIndex >= 0 && savedPageIndex < this.pages.length) ? savedPageIndex : 0;
+    this.currentPageIndex = targetPageIndex;
+    this.pageCounterText.innerText = `หน้า ${targetPageIndex + 1} / ${this.pages.length}`;
     this.undoStack = [];
     this.redoStack = [];
     this.updateUndoRedoButtons();
 
-    await this.canvasEngine.loadPages(this.pages, window.Storage);
+    await this.canvasEngine.loadPages(this.pages, window.Storage, targetPageIndex);
     this.renderThumbnails();
+    this.highlightActiveThumbnail(targetPageIndex);
   }
 
   handleActivePageChanged(pageIndex) {
     this.currentPageIndex = pageIndex;
     this.pageCounterText.innerText = `หน้า ${pageIndex + 1} / ${this.pages.length}`;
     this.highlightActiveThumbnail(pageIndex);
+    if (this.currentNotebook && this.currentNotebook.id) {
+      try {
+        localStorage.setItem(`farmnotes_last_page_${this.currentNotebook.id}`, pageIndex);
+        this.currentNotebook.lastPageIndex = pageIndex;
+      } catch (e) {}
+    }
   }
 
   saveUndoState(pageIndex) {
@@ -510,24 +528,33 @@ window.EditorController = class EditorController {
     });
 
     document.getElementById('btn-back-library').addEventListener('click', async () => {
-      if (this.currentNotebook && this.canvasEngine && this.canvasEngine.pageViews && this.canvasEngine.pageViews[0]) {
+      if (this.currentNotebook) {
+        this.currentNotebook.lastPageIndex = this.currentPageIndex;
         try {
-          const v0 = this.canvasEngine.pageViews[0];
-          if (v0.canvasReady && v0.bgCanvas) {
-            const thumbCanvas = document.createElement('canvas');
-            const scale = Math.min(1, 480 / Math.max(v0.width, v0.height));
-            thumbCanvas.width = Math.round(v0.width * scale);
-            thumbCanvas.height = Math.round(v0.height * scale);
-            const tCtx = thumbCanvas.getContext('2d');
-            tCtx.fillStyle = '#FFFFFF';
-            tCtx.fillRect(0, 0, thumbCanvas.width, thumbCanvas.height);
-            tCtx.drawImage(v0.bgCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
-            if (v0.strokeCanvas) {
-              tCtx.drawImage(v0.strokeCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+          localStorage.setItem(`farmnotes_last_page_${this.currentNotebook.id}`, this.currentPageIndex);
+        } catch (e) {}
+
+        if (this.canvasEngine && this.canvasEngine.pageViews && this.canvasEngine.pageViews[0]) {
+          try {
+            const v0 = this.canvasEngine.pageViews[0];
+            if (v0.canvasReady && v0.bgCanvas) {
+              const thumbCanvas = document.createElement('canvas');
+              const scale = Math.min(1, 480 / Math.max(v0.width, v0.height));
+              thumbCanvas.width = Math.round(v0.width * scale);
+              thumbCanvas.height = Math.round(v0.height * scale);
+              const tCtx = thumbCanvas.getContext('2d');
+              tCtx.fillStyle = '#FFFFFF';
+              tCtx.fillRect(0, 0, thumbCanvas.width, thumbCanvas.height);
+              tCtx.drawImage(v0.bgCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+              if (v0.strokeCanvas) {
+                tCtx.drawImage(v0.strokeCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+              }
+              this.currentNotebook.coverImage = thumbCanvas.toDataURL('image/jpeg', 0.88);
             }
-            this.currentNotebook.coverImage = thumbCanvas.toDataURL('image/jpeg', 0.88);
-            await window.Storage.saveNotebook(this.currentNotebook);
-          }
+          } catch (err) {}
+        }
+        try {
+          await window.Storage.saveNotebook(this.currentNotebook);
         } catch (err) {}
       }
       this.app.showLibrary();

@@ -457,12 +457,13 @@ window.CanvasEngine = class CanvasEngine {
         } else {
           const targetContainer = this.pageViews[startIdx] && this.pageViews[startIdx].container;
           if (targetContainer) {
-            targetContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            targetContainer.scrollIntoView({ behavior: 'auto', block: 'start' });
           }
         }
 
         this.activePageIndex = startIdx;
         this.updateActivePageOnScroll();
+        this.onActivePageChanged(startIdx);
       });
     });
   }
@@ -2180,6 +2181,21 @@ window.CanvasEngine = class CanvasEngine {
       return;
     }
 
+    if (stroke.isShape || stroke.shapeType) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = size;
+      ctx.lineCap  = 'round';
+      ctx.lineJoin = (stroke.shapeType === 'rectangle' || stroke.shapeType === 'triangle') ? 'miter' : 'round';
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
     if (tool === 'highlighter') {
       ctx.globalCompositeOperation = 'multiply';
       ctx.strokeStyle = color;
@@ -3486,6 +3502,8 @@ window.CanvasEngine = class CanvasEngine {
     const stroke = {
       id: 'shape-' + Date.now(),
       tool: tool === 'shape' ? 'pen' : tool,
+      isShape: true,
+      shapeType: shape.type,
       penStyle: isHighlighter ? 'highlighter' : isPencil ? 'pencil' : window.ToolState.penStyle,
       color: isHighlighter ? window.ToolState.highlighterColor : isPencil ? window.ToolState.pencilColor : window.ToolState.color,
       size:  isHighlighter ? window.ToolState.highlighterSize  : isPencil ? window.ToolState.pencilSize  : window.ToolState.size,
