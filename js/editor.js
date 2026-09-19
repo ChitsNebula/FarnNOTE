@@ -2285,9 +2285,11 @@ window.EditorController = class EditorController {
     // ── Tab Switching & Unit Converter Logic ─────────────────────
     const tabCalc = document.getElementById('tab-calc');
     const tabConverter = document.getElementById('tab-converter');
+    const tabEquation = document.getElementById('tab-equation');
     const calcBodyWrapper = document.getElementById('calc-body-wrapper');
     const sciKeypad = calcWidget.querySelector('.sci-keypad-8');
     const unitConverterPanel = document.getElementById('unit-converter-panel');
+    const equationSolverPanel = document.getElementById('equation-solver-panel');
 
     const unitCategories = {
       length: {
@@ -2435,22 +2437,489 @@ window.EditorController = class EditorController {
       }
     };
 
-    if (tabCalc && tabConverter) {
-      tabCalc.addEventListener('click', () => {
-        tabCalc.classList.add('active');
-        tabConverter.classList.remove('active');
+    // ── Tab Switching (3 Tabs: Calc, Converter, Equation) ───────
+    const switchCalcTab = (activeTab) => {
+      [tabCalc, tabConverter, tabEquation].forEach(t => t && t.classList.remove('active'));
+      if (activeTab) activeTab.classList.add('active');
+
+      if (activeTab === tabCalc) {
         if (calcBodyWrapper) calcBodyWrapper.classList.remove('hidden');
         if (sciKeypad) sciKeypad.classList.remove('hidden');
         if (unitConverterPanel) unitConverterPanel.classList.add('hidden');
-      });
-
-      tabConverter.addEventListener('click', () => {
-        tabConverter.classList.add('active');
-        tabCalc.classList.remove('active');
+        if (equationSolverPanel) equationSolverPanel.classList.add('hidden');
+      } else if (activeTab === tabConverter) {
         if (calcBodyWrapper) calcBodyWrapper.classList.add('hidden');
         if (sciKeypad) sciKeypad.classList.add('hidden');
         if (unitConverterPanel) unitConverterPanel.classList.remove('hidden');
+        if (equationSolverPanel) equationSolverPanel.classList.add('hidden');
         runUnitConversion();
+      } else if (activeTab === tabEquation) {
+        if (calcBodyWrapper) calcBodyWrapper.classList.add('hidden');
+        if (sciKeypad) sciKeypad.classList.add('hidden');
+        if (unitConverterPanel) unitConverterPanel.classList.add('hidden');
+        if (equationSolverPanel) equationSolverPanel.classList.remove('hidden');
+        if (btnEqSolve) btnEqSolve.click();
+      }
+    };
+
+    if (tabCalc) tabCalc.addEventListener('click', () => switchCalcTab(tabCalc));
+    if (tabConverter) tabConverter.addEventListener('click', () => switchCalcTab(tabConverter));
+    if (tabEquation) tabEquation.addEventListener('click', () => switchCalcTab(tabEquation));
+
+    // ── Equation Solver Engine & UI ─────────────────────────────
+    const eqSectionSingle = document.getElementById('eq-section-single');
+    const eqSectionSys = document.getElementById('eq-section-sys');
+    const btnEqTypeSingle = document.getElementById('btn-eq-type-single');
+    const btnEqTypeSys = document.getElementById('btn-eq-type-sys');
+    const eqInputSingle = document.getElementById('eq-input-single');
+    const eqInputSys1 = document.getElementById('eq-input-sys1');
+    const eqInputSys2 = document.getElementById('eq-input-sys2');
+    const btnEqClearSingle = document.getElementById('btn-eq-clear-single');
+    const btnEqSolve = document.getElementById('btn-eq-solve');
+    const eqDetectedType = document.getElementById('eq-detected-type');
+    const eqHighlightAnswer = document.getElementById('eq-highlight-answer');
+    const eqStepsContainer = document.getElementById('eq-steps-container');
+    const btnEqCopy = document.getElementById('btn-eq-copy');
+    const btnEqInsert = document.getElementById('btn-eq-insert');
+    let currentEqSolutionText = '';
+
+    const normalizeMathStr = (str) => {
+      if (!str) return '0';
+      let s = str.trim();
+      s = s.replace(/[\u2010-\u2015\u2212]/g, '-');
+      s = s.replace(/×/g, '*');
+      s = s.replace(/÷/g, '/');
+      s = s.replace(/²/g, '^2').replace(/³/g, '^3');
+
+      // Insert multiplication between number and parenthesis: e.g. 3(x - 2) -> 3*(x - 2)
+      s = s.replace(/(\d+)\s*\(/g, '$1*(');
+
+      // Insert multiplication between number and variable/identifier: 2x -> 2*x
+      s = s.replace(/(\d+)\s*([a-zA-Z])/g, '$1*$2');
+
+      // Insert multiplication between variable and parenthesis: x(x+1) -> x*(x+1) (except math functions)
+      const mathFns = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sqrt', 'cbrt', 'log', 'ln', 'abs', 'Math'];
+      s = s.replace(/\b([a-zA-Z]+)\s*\(/g, (m, id) => mathFns.includes(id) ? m : `${id}*(`);
+
+      // Parenthesis followed by number/identifier or parenthesis
+      s = s.replace(/\)\s*(\d+|[a-zA-Z])/g, ')*$1');
+      s = s.replace(/\)\s*\(/g, ')*(');
+
+      // Variable followed by number
+      s = s.replace(/([a-zA-Z])\s*(\d+)/g, '$1*$2');
+
+      // Power operator
+      s = s.replace(/\^/g, '**');
+
+      // Functions to Math.*
+      s = s.replace(/\bsin\(/g, 'Math.sin(');
+      s = s.replace(/\bcos\(/g, 'Math.cos(');
+      s = s.replace(/\btan\(/g, 'Math.tan(');
+      s = s.replace(/\basin\(/g, 'Math.asin(');
+      s = s.replace(/\bacos\(/g, 'Math.acos(');
+      s = s.replace(/\batan\(/g, 'Math.atan(');
+      s = s.replace(/\bsqrt\(/g, 'Math.sqrt(');
+      s = s.replace(/\bcbrt\(/g, 'Math.cbrt(');
+      s = s.replace(/\blog\(/g, 'Math.log10(');
+      s = s.replace(/\bln\(/g, 'Math.log(');
+      s = s.replace(/\babs\(/g, 'Math.abs(');
+      s = s.replace(/\bpi\b/gi, 'Math.PI');
+      s = s.replace(/π/g, 'Math.PI');
+      s = s.replace(/\be\b/g, 'Math.E');
+
+      return s;
+    };
+
+    const buildEvaluator = (rawEq, vars = ['x']) => {
+      let parts = rawEq.split('=');
+      let exprStr = '';
+      if (parts.length >= 2) {
+        let lhs = normalizeMathStr(parts[0]);
+        let rhs = normalizeMathStr(parts.slice(1).join('='));
+        exprStr = `(${lhs}) - (${rhs})`;
+      } else {
+        exprStr = normalizeMathStr(rawEq);
+      }
+
+      try {
+        const fn = new Function(...vars, 'Math', `try { return (${exprStr}); } catch(e){ return NaN; }`);
+        return (...args) => fn(...args, Math);
+      } catch (err) {
+        return null;
+      }
+    };
+
+    const solveSingleEquation = (rawInput) => {
+      if (!rawInput || !rawInput.trim()) {
+        return { success: false, error: 'กรุณากรอกสมการ' };
+      }
+
+      const f = buildEvaluator(rawInput, ['x']);
+      if (!f) return { success: false, error: 'รูปแบบสมการไม่ถูกต้อง' };
+
+      const roundClean = (n) => (Math.abs(n) < 1e-9 ? 0 : Math.round(n * 1e7) / 1e7);
+
+      const c = f(0);
+      const f1 = f(1);
+      const fm1 = f(-1);
+
+      if (isNaN(c) || isNaN(f1) || isNaN(fm1) || !isFinite(c) || !isFinite(f1) || !isFinite(fm1)) {
+        return { success: false, error: 'ไม่สามารถคำนวณสมการนี้ได้' };
+      }
+
+      let a = (f1 + fm1 - 2 * c) / 2;
+      let b = (f1 - fm1) / 2;
+
+      const f2 = f(2);
+      const f3 = f(3);
+      const quad2 = 4 * a + 2 * b + c;
+      const quad3 = 9 * a + 3 * b + c;
+
+      const isPoly = Math.abs(f2 - quad2) < 1e-4 && Math.abs(f3 - quad3) < 1e-4;
+
+      if (isPoly) {
+        a = roundClean(a);
+        b = roundClean(b);
+        let cClean = roundClean(c);
+
+        if (a === 0) {
+          // Linear: bx + c = 0
+          if (b === 0) {
+            if (cClean === 0) {
+              return {
+                success: true,
+                type: 'สมการเอกลักษณ์ (Identity)',
+                shortAnswer: 'มีคำตอบเป็นอนันต์',
+                answer: 'สมการเป็นจริงสำหรับทุกจำนวนจริง (Infinite Solutions)',
+                steps: [
+                  { title: '1. วิเคราะห์สมการ', math: `${rawInput}` },
+                  { title: '2. ผลลัพธ์', math: 'ทั้งสองข้างของสมการมีค่าเท่ากันเสมอสำหรับทุกค่า x' }
+                ]
+              };
+            } else {
+              return {
+                success: true,
+                type: 'สมการขัดแย้ง (No Solution)',
+                shortAnswer: 'ไม่มีคำตอบ',
+                answer: 'สมการไม่มีคำตอบ (No Solution)',
+                steps: [
+                  { title: '1. วิเคราะห์สมการ', math: `${rawInput}` },
+                  { title: '2. ผลลัพธ์', math: `เกิดข้อขัดแย้ง: ${cClean} ≠ 0 ดังนั้นไม่มีค่า x ที่สอดคล้อง` }
+                ]
+              };
+            }
+          }
+
+          const root = roundClean(-cClean / b);
+          const cSign = cClean >= 0 ? `+ ${cClean}` : `− ${Math.abs(cClean)}`;
+          return {
+            success: true,
+            type: 'สมการเชิงเส้น 1 ตัวแปร',
+            shortAnswer: `x = ${root}`,
+            answer: `x = ${root}`,
+            steps: [
+              { title: '1. จัดรูปสมการในรูป ax + b = 0', math: `${b}x ${cSign} = 0` },
+              { title: '2. ย้ายข้างพจน์ค่าคงที่', math: `${b}x = ${roundClean(-cClean)}` },
+              { title: '3. นำสัมประสิทธิ์ไปหารทั้งสองข้าง', math: `x = (${roundClean(-cClean)}) / (${b})` },
+              { title: '4. สรุปคำตอบ', math: `x = ${root}` }
+            ]
+          };
+        } else {
+          // Quadratic: ax^2 + bx + c = 0
+          const delta = roundClean(b * b - 4 * a * cClean);
+          const bSign = b >= 0 ? `+ ${b}` : `− ${Math.abs(b)}`;
+          const cSign = cClean >= 0 ? `+ ${cClean}` : `− ${Math.abs(cClean)}`;
+          const stdForm = `${a}x² ${bSign}x ${cSign} = 0`;
+
+          if (delta > 0) {
+            const sqrtDelta = Math.sqrt(delta);
+            const r1 = roundClean((-b + sqrtDelta) / (2 * a));
+            const r2 = roundClean((-b - sqrtDelta) / (2 * a));
+            return {
+              success: true,
+              type: 'สมการกำลังสอง (2 รากจริง)',
+              shortAnswer: `x = ${r1}, ${r2}`,
+              answer: `x₁ = ${r1},  x₂ = ${r2}`,
+              steps: [
+                { title: '1. จัดรูปสมการมาตรฐาน ax² + bx + c = 0', math: stdForm },
+                { title: '2. ระบุสัมประสิทธิ์', math: `a = ${a},  b = ${b},  c = ${cClean}` },
+                { title: '3. คำนวณดิสคริมิแนนต์ (Δ = b² − 4ac)', math: `Δ = (${b})² − 4(${a})(${cClean}) = ${delta} > 0` },
+                { title: '4. ใช้สูตร x = (−b ± √Δ) / 2a', math: `x = (−(${b}) ± √${delta}) / (2 × ${a})` },
+                { title: '5. คำนวณคำตอบทั้งสองค่า', math: `x₁ = ${r1},  x₂ = ${r2}` }
+              ]
+            };
+          } else if (delta === 0) {
+            const r = roundClean(-b / (2 * a));
+            return {
+              success: true,
+              type: 'สมการกำลังสอง (รากจริงซ้ำ)',
+              shortAnswer: `x = ${r}`,
+              answer: `x = ${r} (รากซ้ำ)`,
+              steps: [
+                { title: '1. จัดรูปสมการมาตรฐาน ax² + bx + c = 0', math: stdForm },
+                { title: '2. คำนวณดิสคริมิแนนต์ (Δ = b² − 4ac)', math: `Δ = (${b})² − 4(${a})(${cClean}) = 0` },
+                { title: '3. ใช้สูตร x = −b / 2a', math: `x = −(${b}) / (2 × ${a}) = ${r}` }
+              ]
+            };
+          } else {
+            const realPart = roundClean(-b / (2 * a));
+            const imagPart = roundClean(Math.sqrt(-delta) / (2 * Math.abs(a)));
+            const shortAns = `${realPart} ± ${imagPart}i`;
+            return {
+              success: true,
+              type: 'สมการกำลังสอง (รากจำนวนเชิงซ้อน)',
+              shortAnswer: `x = ${shortAns}`,
+              answer: `x = ${realPart} ± ${imagPart}i`,
+              steps: [
+                { title: '1. จัดรูปสมการมาตรฐาน ax² + bx + c = 0', math: stdForm },
+                { title: '2. คำนวณดิสคริมิแนนต์ (Δ = b² − 4ac)', math: `Δ = (${b})² − 4(${a})(${cClean}) = ${delta} < 0` },
+                { title: '3. วิเคราะห์ลักษณะคำตอบ', math: 'Δ < 0 สมการไม่มีคำตอบเป็นจำนวนจริง แต่มีคำตอบเป็นจำนวนเชิงซ้อน' },
+                { title: '4. ใช้สูตร x = (−b ± i√|Δ|) / 2a', math: `x = (−(${b}) ± i√${-delta}) / (2 × ${a})` },
+                { title: '5. สรุปคำตอบจำนวนเชิงซ้อน', math: `x = ${realPart} ± ${imagPart}i` }
+              ]
+            };
+          }
+        }
+      }
+
+      // Numerical Search in range [-100, 100]
+      const roots = [];
+      const stepSize = 0.5;
+      let prevX = -100;
+      let prevY = f(prevX);
+
+      for (let curX = -99.5; curX <= 100; curX += stepSize) {
+        const curY = f(curX);
+        if (!isNaN(prevY) && !isNaN(curY)) {
+          if (prevY * curY <= 0) {
+            let left = prevX, right = curX;
+            for (let iter = 0; iter < 40; iter++) {
+              const mid = (left + right) / 2;
+              const midY = f(mid);
+              if (Math.abs(midY) < 1e-9) { left = mid; right = mid; break; }
+              if (prevY * midY <= 0) right = mid;
+              else left = mid;
+            }
+            const foundRoot = roundClean((left + right) / 2);
+            if (!roots.some(r => Math.abs(r - foundRoot) < 1e-4)) {
+              roots.push(foundRoot);
+            }
+          }
+        }
+        prevX = curX;
+        prevY = curY;
+      }
+
+      if (roots.length > 0) {
+        return {
+          success: true,
+          type: 'สมการพหุนาม/ฟังก์ชันทั่วไป (คำนวณเชิงตัวเลข)',
+          shortAnswer: `x = ${roots.join(', ')}`,
+          answer: `x ≈ ${roots.join(', ')}`,
+          steps: [
+            { title: '1. จัดรูปสมการในรูป f(x) = 0', math: `f(x) = 0` },
+            { title: '2. คำนวณหาค่ารากของสมการด้วยระเบียบวิธีเชิงตัวเลข', math: 'ใช้วิธี Bisection / Newton Refinement ในช่วง [-100, 100]' },
+            { title: '3. สรุปคำตอบที่พบ', math: `x ≈ ${roots.join(', ')}` }
+          ]
+        };
+      }
+
+      return {
+        success: false,
+        error: 'ไม่พบรากของสมการในช่วง [-100, 100] หรือรูปแบบสมการซับซ้อนเกินไป'
+      };
+    };
+
+    const solveEquationSystem = (raw1, raw2) => {
+      if (!raw1 || !raw2) {
+        return { success: false, error: 'กรุณากรอกสมการทั้ง 2 สมการ' };
+      }
+
+      const getLinearCoeffs = (eqStr) => {
+        let parts = eqStr.split('=');
+        let exprStr = parts.length >= 2 ? `(${normalizeMathStr(parts[0])}) - (${normalizeMathStr(parts.slice(1).join('='))})` : normalizeMathStr(eqStr);
+        try {
+          const fn = new Function('x', 'y', 'Math', `try { return (${exprStr}); } catch(e){ return NaN; }`);
+          const g = (xVal, yVal) => fn(xVal, yVal, Math);
+          const g00 = g(0, 0);
+          const a = g(1, 0) - g00;
+          const b = g(0, 1) - g00;
+          const c = -g00;
+          return { a, b, c, valid: !isNaN(a) && !isNaN(b) && !isNaN(c) && isFinite(a) && isFinite(b) && isFinite(c) };
+        } catch (e) {
+          return { valid: false };
+        }
+      };
+
+      const eq1 = getLinearCoeffs(raw1);
+      const eq2 = getLinearCoeffs(raw2);
+
+      if (!eq1.valid || !eq2.valid) {
+        return { success: false, error: 'รูปแบบระบบสมการเชิงเส้นไม่ถูกต้อง (รองรับรูปแบบเชิงเส้น ax + by = c)' };
+      }
+
+      const roundClean = (n) => (Math.abs(n) < 1e-9 ? 0 : Math.round(n * 1e7) / 1e7);
+
+      const a1 = roundClean(eq1.a), b1 = roundClean(eq1.b), c1 = roundClean(eq1.c);
+      const a2 = roundClean(eq2.a), b2 = roundClean(eq2.b), c2 = roundClean(eq2.c);
+
+      const D = roundClean(a1 * b2 - a2 * b1);
+      const Dx = roundClean(c1 * b2 - c2 * b1);
+      const Dy = roundClean(a1 * c2 - a2 * c1);
+
+      const std1 = `${a1}x ${b1 >= 0 ? '+ ' + b1 : '− ' + Math.abs(b1)}y = ${c1}`;
+      const std2 = `${a2}x ${b2 >= 0 ? '+ ' + b2 : '− ' + Math.abs(b2)}y = ${c2}`;
+
+      if (Math.abs(D) > 1e-9) {
+        const x = roundClean(Dx / D);
+        const y = roundClean(Dy / D);
+
+        return {
+          success: true,
+          type: 'ระบบสมการเชิงเส้น 2 ตัวแปร',
+          shortAnswer: `x = ${x}, y = ${y}`,
+          answer: `x = ${x},  y = ${y}`,
+          steps: [
+            { title: '1. จัดรูปสมการมาตรฐาน', math: `(1) ${std1}\n(2) ${std2}` },
+            { title: '2. คำนวณดีเทอร์มิแนนต์หลัก (D = a₁b₂ − a₂b₁)', math: `D = (${a1})(${b2}) − (${a2})(${b1}) = ${D}` },
+            { title: '3. คำนวณ Dx และ Dy', math: `Dx = (${c1})(${b2}) − (${c2})(${b1}) = ${Dx}\nDy = (${a1})(${c2}) − (${a2})(${c1}) = ${Dy}` },
+            { title: '4. หาค่าคำตอบ x = Dx / D และ y = Dy / D', math: `x = ${Dx} / ${D} = ${x}\ny = ${Dy} / ${D} = ${y}` }
+          ]
+        };
+      } else {
+        if (Math.abs(Dx) < 1e-9 && Math.abs(Dy) < 1e-9) {
+          return {
+            success: true,
+            type: 'ระบบสมการเชิงเส้น 2 ตัวแปร',
+            shortAnswer: 'มีคำตอบเป็นอนันต์',
+            answer: 'ระบบสมการมีคำตอบเป็นอนันต์ (เส้นตรงทับกัน)',
+            steps: [
+              { title: '1. สมการทั้งสอง', math: `(1) ${std1}\n(2) ${std2}` },
+              { title: '2. ดีเทอร์มิแนนต์', math: `D = 0, Dx = 0, Dy = 0` },
+              { title: '3. สรุปผล', math: 'สมการทั้งสองเป็นสมการเดียวกัน จึงมีจุดตัดร่วมกันเป็นอนันต์' }
+            ]
+          };
+        } else {
+          return {
+            success: true,
+            type: 'ระบบสมการเชิงเส้น 2 ตัวแปร',
+            shortAnswer: 'ไม่มีคำตอบ',
+            answer: 'ระบบสมการไม่มีคำตอบ (เส้นตรงขนานกัน)',
+            steps: [
+              { title: '1. สมการทั้งสอง', math: `(1) ${std1}\n(2) ${std2}` },
+              { title: '2. ดีเทอร์มิแนนต์', math: `D = 0 แต่ Dx หรือ Dy ≠ 0` },
+              { title: '3. สรุปผล', math: 'กราฟของสมการทั้งสองเป็นเส้นตรงที่ขนานกัน ไม่ตัดกัน จึงไม่มีคำตอบ' }
+            ]
+          };
+        }
+      }
+    };
+
+    const renderEquationSolution = (sol) => {
+      if (!eqDetectedType || !eqHighlightAnswer || !eqStepsContainer) return;
+      if (sol.success) {
+        eqDetectedType.innerText = sol.type;
+        eqHighlightAnswer.innerText = sol.answer;
+        eqStepsContainer.innerHTML = sol.steps.map(s => `
+          <div class="eq-step-row">
+            <div class="eq-step-title">${s.title}</div>
+            <div class="eq-step-math">${s.math.replace(/\n/g, '<br>')}</div>
+          </div>
+        `).join('');
+
+        currentEqSolutionText = `📐 วิธีแก้สมการ: ${sol.type}\n` +
+          `คำตอบ: ${sol.answer}\n\n` +
+          sol.steps.map(s => `• ${s.title}:\n  ${s.math}`).join('\n\n');
+      } else {
+        eqDetectedType.innerText = 'ข้อผิดพลาด';
+        eqHighlightAnswer.innerText = sol.error || 'ไม่สามารถแก้สมการได้';
+        eqStepsContainer.innerHTML = '';
+        currentEqSolutionText = `ข้อผิดพลาด: ${sol.error}`;
+      }
+    };
+
+    if (btnEqTypeSingle && btnEqTypeSys) {
+      btnEqTypeSingle.addEventListener('click', () => {
+        btnEqTypeSingle.classList.add('active');
+        btnEqTypeSys.classList.remove('active');
+        if (eqSectionSingle) eqSectionSingle.classList.remove('hidden');
+        if (eqSectionSys) eqSectionSys.classList.add('hidden');
+      });
+
+      btnEqTypeSys.addEventListener('click', () => {
+        btnEqTypeSys.classList.add('active');
+        btnEqTypeSingle.classList.remove('active');
+        if (eqSectionSys) eqSectionSys.classList.remove('hidden');
+        if (eqSectionSingle) eqSectionSingle.classList.add('hidden');
+      });
+    }
+
+    if (btnEqClearSingle && eqInputSingle) {
+      btnEqClearSingle.addEventListener('click', () => {
+        eqInputSingle.value = '';
+        eqInputSingle.focus();
+      });
+    }
+
+    if (btnEqSolve) {
+      btnEqSolve.addEventListener('click', () => {
+        const isSys = btnEqTypeSys && btnEqTypeSys.classList.contains('active');
+        if (isSys) {
+          const eq1 = eqInputSys1 ? eqInputSys1.value : '';
+          const eq2 = eqInputSys2 ? eqInputSys2.value : '';
+          const sol = solveEquationSystem(eq1, eq2);
+          renderEquationSolution(sol);
+        } else {
+          const eq = eqInputSingle ? eqInputSingle.value : '';
+          const sol = solveSingleEquation(eq);
+          renderEquationSolution(sol);
+        }
+      });
+    }
+
+    // Attach preset chips
+    const eqPresetChips = document.querySelectorAll('.eq-chip');
+    eqPresetChips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        const eqStr = chip.getAttribute('data-eq');
+        if (eqInputSingle) {
+          eqInputSingle.value = eqStr;
+          if (btnEqTypeSingle) btnEqTypeSingle.click();
+          if (btnEqSolve) btnEqSolve.click();
+        }
+      });
+    });
+
+    // Enter key handling in inputs
+    [eqInputSingle, eqInputSys1, eqInputSys2].forEach(inp => {
+      if (inp) {
+        inp.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (btnEqSolve) btnEqSolve.click();
+          }
+        });
+      }
+    });
+
+    // Copy Solution
+    if (btnEqCopy) {
+      btnEqCopy.addEventListener('click', () => {
+        const text = currentEqSolutionText || (eqHighlightAnswer ? eqHighlightAnswer.innerText : '');
+        navigator.clipboard.writeText(text);
+        window.showToast ? window.showToast('คัดลอกวิธีทำแล้ว') : null;
+      });
+    }
+
+    // Insert Solution to Notes
+    if (btnEqInsert) {
+      btnEqInsert.addEventListener('click', () => {
+        const text = currentEqSolutionText || (eqHighlightAnswer ? eqHighlightAnswer.innerText : '');
+        const activeView = window.editorApp && window.editorApp.canvasEngine && window.editorApp.canvasEngine.pageViews[window.editorApp.canvasEngine.activePageIndex];
+        if (activeView) {
+          window.editorApp.canvasEngine.addTextBox(activeView, 100, 100, text);
+          window.showToast ? window.showToast('แทรกลงในโน้ตแล้ว') : null;
+        }
       });
     }
 
@@ -2860,6 +3329,19 @@ window.EditorController = class EditorController {
           const closeCount = (prettyExpr.match(/\)/g) || []).length;
           if (openCount > closeCount) {
             prettyExpr += ')'.repeat(openCount - closeCount);
+          }
+
+          // Check if expression is an equation (contains variable 'x' or '=')
+          if (prettyExpr.includes('x') || prettyExpr.includes('=')) {
+            const sol = solveSingleEquation(prettyExpr);
+            if (sol.success) {
+              const historyText = `${prettyExpr} :`;
+              expr = sol.shortAnswer;
+              isEvaluated = true;
+              updateDisplay(historyText);
+              if (eqInputSingle) eqInputSingle.value = prettyExpr;
+              return;
+            }
           }
 
           const historyText = `${prettyExpr} =`;

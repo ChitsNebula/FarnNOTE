@@ -1910,6 +1910,10 @@
   color: #3B82F6;
 }
 
+.calc-tab.active#tab-equation i {
+  color: #8B5CF6;
+}
+
 /* Unit Converter Panel (Vibrant & Clean Design) */
 .unit-converter-panel {
   padding: 10px 14px 14px;
@@ -2110,6 +2114,288 @@
 .unit-action-btn.primary:hover {
   background: linear-gradient(135deg, #059669 0%, #047857 100%);
   box-shadow: 0 4px 16px rgba(16, 185, 129, 0.45);
+}
+
+/* ==========================================
+   Equation Solver Panel (ระบบแก้สมการ)
+   ========================================== */
+.equation-solver-panel {
+  padding: 10px 14px 14px;
+  background: transparent;
+  color: #1E293B;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.equation-solver-panel.hidden {
+  display: none !important;
+}
+
+/* 1 Variable vs 2 Variables Mode Selector */
+.eq-type-selector {
+  display: flex;
+  background: #E2E8F0;
+  padding: 3px;
+  border-radius: 11px;
+  gap: 3px;
+}
+
+.eq-type-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748B;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.eq-type-btn:hover {
+  color: #0F172A;
+}
+
+.eq-type-btn.active {
+  background: #FFFFFF;
+  color: #6366F1;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.eq-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eq-input-section.hidden {
+  display: none !important;
+}
+
+.eq-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.eq-input-group label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64748B;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.eq-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.eq-text-input {
+  width: 100%;
+  padding: 9px 34px 9px 12px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  border-radius: 11px;
+  border: 1.5px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #1E293B;
+  outline: none;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.eq-text-input:focus {
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+.eq-clear-btn {
+  position: absolute;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: #E2E8F0;
+  color: #64748B;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+}
+
+.eq-clear-btn:hover {
+  background: #CBD5E1;
+  color: #0F172A;
+}
+
+/* Preset Chips */
+.eq-preset-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.eq-preset-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748B;
+}
+
+.eq-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.eq-chip {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.eq-chip:hover {
+  background: #EEF2FF;
+  border-color: #A5B4FC;
+  color: #4338CA;
+  transform: translateY(-1px);
+}
+
+/* Big Radiant Solve Button */
+.eq-solve-btn {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.38);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.eq-solve-btn:hover {
+  background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%);
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.48);
+  transform: translateY(-1px);
+}
+
+.eq-solve-btn:active {
+  transform: scale(0.97);
+}
+
+/* Solution Card */
+.eq-solution-card {
+  background: #FFFFFF;
+  border-radius: 14px;
+  border: 1px solid #CBD5E1;
+  padding: 12px 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eq-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.eq-result-tag {
+  font-size: 11px;
+  font-weight: 800;
+  color: #10B981;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.eq-type-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #EEF2FF;
+  color: #4F46E5;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.eq-highlight-answer {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0F172A;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: center;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
+  border-radius: 10px;
+  border: 1px solid #E2E8F0;
+  word-break: break-all;
+}
+
+.eq-steps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #334155;
+  border-top: 1px dashed #E2E8F0;
+  padding-top: 8px;
+}
+
+.eq-step-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: #F8FAFC;
+  border: 1px solid #F1F5F9;
+}
+
+.eq-step-title {
+  font-weight: 700;
+  color: #475569;
+  font-size: 11px;
+}
+
+.eq-step-math {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #1E293B;
+  font-weight: 600;
+  word-break: break-all;
 }
 
 .calc-input {
@@ -2321,6 +2607,40 @@
 .calc-btn.btn-equals:hover {
   box-shadow: 0 5px 18px rgba(16, 185, 129, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
   filter: brightness(1.06);
+}
+
+/* Variable X key in Keypad */
+.calc-btn.btn-var-x {
+  background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%) !important;
+  color: #6D28D9 !important;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  font-style: italic;
+  font-family: 'Times New Roman', Times, serif;
+  border: 1.5px solid rgba(196, 181, 253, 0.95) !important;
+  box-shadow: 0 2px 5px rgba(109, 40, 217, 0.12), inset 0 1px 0 #FFFFFF !important;
+}
+.calc-btn.btn-var-x:hover {
+  background: #EDE9FE !important;
+  border-color: #8B5CF6 !important;
+  color: #5B21B6 !important;
+  box-shadow: 0 4px 10px rgba(109, 40, 217, 0.22) !important;
+}
+
+/* Docked mode handling for 3 tabs and equation panel */
+.calculator-widget.docked-right .calc-tab,
+.calculator-widget.docked-left .calc-tab {
+  padding: 5px 4px !important;
+  font-size: 11.5px !important;
+  gap: 4px !important;
+}
+
+.calculator-widget.docked-right .equation-solver-panel,
+.calculator-widget.docked-left .equation-solver-panel {
+  flex: 1;
+  padding: 12px;
+  gap: 10px;
+  overflow-y: auto;
 }
 
 .sci-spacer {
