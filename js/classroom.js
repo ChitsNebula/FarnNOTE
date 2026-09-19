@@ -32,6 +32,7 @@
         this.driveFilesCache = [];
       }
       this.driveFolderStack = [{ id: 'root', name: 'ไดรฟ์ของฉัน' }];
+      this.currentDriveSource = 'my-drive';
       this.currentCourse = null;
       this.tokenClient = null;
 
@@ -43,6 +44,7 @@
       this.driveView = null;
       this.driveBreadcrumbsEl = null;
       this.driveBtnUp = null;
+      this.driveSourceChipsEl = null;
       this.linkImportView = null;
     }
 
@@ -75,6 +77,7 @@
       this.driveSearchInput = document.getElementById('cr-drive-search-input');
       this.driveBreadcrumbsEl = document.getElementById('cr-drive-breadcrumbs');
       this.driveBtnUp = document.getElementById('btn-cr-drive-up');
+      this.driveSourceChipsEl = document.getElementById('cr-drive-source-chips');
       this.accountBanner = document.getElementById('cr-account-banner');
       this.courseHeaderTitle = document.getElementById('cr-course-header-title');
       this.courseHeaderSubtitle = document.getElementById('cr-course-header-subtitle');
@@ -178,6 +181,19 @@
         tabLink.addEventListener('click', () => {
           setTabActive(tabLink);
           this.showView('link');
+        });
+      }
+
+      // Drive Source Chips (My Drive vs Shared with me vs Starred)
+      if (this.driveSourceChipsEl) {
+        const chips = this.driveSourceChipsEl.querySelectorAll('.cr-source-chip');
+        chips.forEach(chip => {
+          chip.addEventListener('click', () => {
+            chips.forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            const source = chip.dataset.source;
+            this.switchDriveSource(source);
+          });
         });
       }
 
@@ -792,7 +808,22 @@
       }
     }
 
-    // ── Google Drive Explorer Methods (v2.13.6 - Folder Explorer) ───────────
+    // ── Google Drive Explorer Methods (v2.13.7 - Shared with me & Starred) ──
+
+    switchDriveSource(source) {
+      this.currentDriveSource = source || 'my-drive';
+      if (this.driveSearchInput) this.driveSearchInput.value = '';
+
+      if (this.currentDriveSource === 'shared-with-me') {
+        this.driveFolderStack = [{ id: 'shared-with-me', name: 'แชร์กับฉัน' }];
+      } else if (this.currentDriveSource === 'starred') {
+        this.driveFolderStack = [{ id: 'starred', name: 'ที่ติดดาว' }];
+      } else {
+        this.driveFolderStack = [{ id: 'root', name: 'ไดรฟ์ของฉัน' }];
+      }
+
+      this.loadDriveFiles();
+    }
 
     navigateToFolder(folderId, folderName) {
       if (this.driveSearchInput) this.driveSearchInput.value = '';
@@ -823,9 +854,16 @@
     renderDriveBreadcrumbs(searchQuery = '') {
       if (!this.driveBreadcrumbsEl) return;
 
+      const getSourceIcon = (source) => {
+        if (source === 'shared-with-me') return '<i class="fa-solid fa-user-group"></i> ';
+        if (source === 'starred') return '<i class="fa-solid fa-star"></i> ';
+        return '<i class="fa-solid fa-hard-drive"></i> ';
+      };
+
       if (searchQuery) {
+        const rootName = this.driveFolderStack[0] ? this.driveFolderStack[0].name : 'ไดรฟ์';
         this.driveBreadcrumbsEl.innerHTML = `
-          <span class="cr-drive-crumb" data-crumb-index="root"><i class="fa-brands fa-google-drive"></i> ไดรฟ์ของฉัน</span>
+          <span class="cr-drive-crumb" data-crumb-index="root">${getSourceIcon(this.currentDriveSource)}${this.escapeHtml(rootName)}</span>
           <span class="cr-drive-crumb-sep"><i class="fa-solid fa-chevron-right"></i></span>
           <span class="cr-drive-crumb active"><i class="fa-solid fa-magnifying-glass"></i> ค้นหา "${this.escapeHtml(searchQuery)}"</span>
         `;
@@ -833,8 +871,7 @@
         if (rootCrumb) {
           rootCrumb.addEventListener('click', () => {
             if (this.driveSearchInput) this.driveSearchInput.value = '';
-            this.driveFolderStack = [{ id: 'root', name: 'ไดรฟ์ของฉัน' }];
-            this.loadDriveFiles();
+            this.navigateToCrumbIndex(0);
           });
         }
         if (this.driveBtnUp) this.driveBtnUp.disabled = false;
@@ -844,7 +881,7 @@
       let html = '';
       this.driveFolderStack.forEach((folder, idx) => {
         const isLast = idx === this.driveFolderStack.length - 1;
-        const icon = idx === 0 ? '<i class="fa-brands fa-google-drive"></i> ' : '<i class="fa-solid fa-folder"></i> ';
+        const icon = idx === 0 ? getSourceIcon(this.currentDriveSource) : '<i class="fa-solid fa-folder"></i> ';
 
         if (idx > 0) {
           html += `<span class="cr-drive-crumb-sep"><i class="fa-solid fa-chevron-right"></i></span>`;
@@ -914,6 +951,10 @@
         if (searchQuery) {
           const safeQ = searchQuery.replace(/'/g, "\\'");
           q = `trashed = false and (name contains '${safeQ}') and (mimeType = 'application/vnd.google-apps.folder' or mimeType = 'application/pdf')`;
+        } else if (currentFolder.id === 'shared-with-me') {
+          q = `sharedWithMe = true and trashed = false and (mimeType = 'application/vnd.google-apps.folder' or mimeType = 'application/pdf')`;
+        } else if (currentFolder.id === 'starred') {
+          q = `starred = true and trashed = false and (mimeType = 'application/vnd.google-apps.folder' or mimeType = 'application/pdf')`;
         } else {
           q = `'${currentFolder.id}' in parents and trashed = false and (mimeType = 'application/vnd.google-apps.folder' or mimeType = 'application/pdf')`;
         }
@@ -921,7 +962,9 @@
         const url = new URL('https://www.googleapis.com/drive/v3/files');
         url.searchParams.set('q', q);
         url.searchParams.set('fields', 'files(id, name, mimeType, modifiedTime, size, iconLink, thumbnailLink, webViewLink)');
-        url.searchParams.set('orderBy', 'folder,name');
+        if (currentFolder.id !== 'shared-with-me') {
+          url.searchParams.set('orderBy', 'folder,name');
+        }
         url.searchParams.set('pageSize', '100');
 
         const res = await fetch(url.toString(), {
@@ -952,6 +995,10 @@
             pdfFiles.push(item);
           }
         });
+
+        // Natural sort folders & files
+        folders.sort((a, b) => a.name.localeCompare(b.name, 'th'));
+        pdfFiles.sort((a, b) => a.name.localeCompare(b.name, 'th'));
 
         this.renderDriveContent(folders, pdfFiles, searchQuery);
       } catch (err) {

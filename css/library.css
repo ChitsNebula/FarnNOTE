@@ -1487,6 +1487,50 @@
   transform: translateY(-1px);
 }
 
+/* Drive Category / Source Chips (v2.13.7) */
+.cr-drive-source-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.cr-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid #E5E5EA;
+  background: #FFFFFF;
+  color: #5F6368;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.cr-source-chip:hover {
+  background: #F1F3F4;
+  color: #202124;
+  border-color: #D1D5DB;
+}
+
+.cr-source-chip.active {
+  background: #E8F0FE;
+  border-color: #1A73E8;
+  color: #1A73E8;
+  font-weight: 600;
+}
+
+.cr-source-chip i {
+  font-size: 13px;
+}
+
 /* Google Drive Breadcrumbs & Navigation Bar (v2.13.6) */
 .cr-drive-nav-bar {
   display: flex;
