@@ -276,8 +276,18 @@ window.PDFEngine = {
         }
       }
 
-      // 3) Draw strokes
+      // 3) Draw strokes (including fill bucket strokes)
       if (pageData.strokes && pageData.strokes.length && canvasEngine) {
+        for (const s of pageData.strokes) {
+          if (s.tool === 'fill' && s.dataUrl && (!s._img || !s._img.complete)) {
+            await new Promise((resolve) => {
+              const img = new Image();
+              img.onload = () => { s._img = img; resolve(); };
+              img.onerror = resolve;
+              img.src = s.dataUrl;
+            });
+          }
+        }
         pageData.strokes.forEach(s => canvasEngine.drawSingleStroke(ctx, s));
       }
 

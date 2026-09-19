@@ -1671,6 +1671,11 @@ window.EditorController = class EditorController {
       hlTip.style.background = window.ToolState.highlighterHex || '#FFD60A';
     }
 
+    const fillTip = document.querySelector('.fill-color-tip');
+    if (fillTip) {
+      fillTip.style.background = window.ToolState.color || '#1C1C1E';
+    }
+
     const currentTool = window.ToolState.currentTool;
     const activeColor = (currentTool === 'highlighter'
       ? (window.ToolState.highlighterHex || '#FFD60A')

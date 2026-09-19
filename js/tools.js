@@ -34,9 +34,10 @@ window.bindInstantTap = function(el, callback) {
 };
 
 window.ToolState = {
-  currentTool: 'pen', // 'pen', 'highlighter', 'pencil', 'eraser', 'shape', 'lasso', 'text', 'image', 'laser'
+  currentTool: 'pen', // 'pen', 'highlighter', 'pencil', 'eraser', 'shape', 'fill', 'lasso', 'text', 'image', 'laser'
   penStyle: 'fountain', // 'fountain', 'ballpoint', 'brush'
   color: '#1C1C1E',
+  fillColor: '#1C1C1E',
   size: 4, // stroke width
   opacity: 1.0,
   eraserMode: 'pixel', // 'pixel', 'object'

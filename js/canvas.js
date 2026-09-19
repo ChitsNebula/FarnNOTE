@@ -90,6 +90,10 @@ window.CanvasEngine = class CanvasEngine {
       const color = (tool === 'pencil' ? window.ToolState.pencilColor : window.ToolState.color) || '#1C1C1E';
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.5" fill="none" stroke="rgba(0,0,0,0.4)" stroke-width="2"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="#FFFFFF" stroke-width="1.2"/><circle cx="12" cy="12" r="3.5" fill="${color}"/><circle cx="12" cy="12" r="1" fill="#FFFFFF"/></svg>`;
       cursorStyle = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 12 12, crosshair`;
+    } else if (tool === 'fill') {
+      const color = (window.ToolState && window.ToolState.color) || '#1C1C1E';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><g transform="rotate(-15 14 14)"><path d="M19 10.5L9.5 1 8 2.5l2.4 2.4L5.2 10.1c-.6.6-.6 1.5 0 2.1l5.6 5.6c.3.3.7.4 1.1.4s.8-.1 1.1-.4l5.2-5.2c.6-.6.6-1.5 0-2.1z" fill="none" stroke="#1C1C1E" stroke-width="2.5"/><path d="M19 10.5L9.5 1 8 2.5l2.4 2.4L5.2 10.1c-.6.6-.6 1.5 0 2.1l5.6 5.6c.3.3.7.4 1.1.4s.8-.1 1.1-.4l5.2-5.2c.6-.6.6-1.5 0-2.1z" fill="#FFFFFF"/><path d="M5.5 10.5l4.8-4.8 4.8 4.8H5.5z" fill="${color}"/><path d="M21 13.5c-1.5 1.5-1.5 3 0 4.5 1.5-1.5 1.5-3 0-4.5z" fill="${color}" stroke="#1C1C1E" stroke-width="1.2"/></g></svg>`;
+      cursorStyle = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 5 22, crosshair`;
     }
 
     this._currentCursorStyle = cursorStyle;
@@ -1018,6 +1022,12 @@ window.CanvasEngine = class CanvasEngine {
 
       if (window.ToolState.currentTool === 'text') {
         this.addTextBox(view, pt.x, pt.y);
+        return;
+      }
+
+      if (window.ToolState.currentTool === 'fill') {
+        if (e.cancelable) e.preventDefault();
+        this.applyFloodFill(view, pt);
         return;
       }
 
@@ -2126,6 +2136,32 @@ window.CanvasEngine = class CanvasEngine {
   }
 
   drawSingleStroke(ctx, stroke) {
+    if (!stroke) return;
+    if (stroke.tool === 'fill') {
+      if (stroke.bounds) {
+        ctx.save();
+        if (stroke._canvas) {
+          ctx.drawImage(stroke._canvas, stroke.bounds.x, stroke.bounds.y, stroke.bounds.w, stroke.bounds.h);
+        } else if (stroke.dataUrl) {
+          if (!stroke._img) {
+            const img = new Image();
+            img.onload = () => {
+              if (ctx && ctx.canvas) {
+                ctx.drawImage(img, stroke.bounds.x, stroke.bounds.y, stroke.bounds.w, stroke.bounds.h);
+              }
+            };
+            img.src = stroke.dataUrl;
+            stroke._img = img;
+          }
+          if (stroke._img.complete && stroke._img.naturalWidth > 0) {
+            ctx.drawImage(stroke._img, stroke.bounds.x, stroke.bounds.y, stroke.bounds.w, stroke.bounds.h);
+          }
+        }
+        ctx.restore();
+      }
+      return;
+    }
+
     const { points, tool, penStyle, color, size } = stroke;
     if (!points || points.length === 0) return;
 
@@ -2244,6 +2280,10 @@ window.CanvasEngine = class CanvasEngine {
 
   getStrokeAABB(s) {
     if (s._box) return s._box;
+    if (s.tool === 'fill' && s.bounds) {
+      s._box = { minX: s.bounds.x, maxX: s.bounds.x + s.bounds.w, minY: s.bounds.y, maxY: s.bounds.y + s.bounds.h };
+      return s._box;
+    }
     if (!s.points || s.points.length === 0) return null;
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     const pts = s.points;
@@ -2257,6 +2297,216 @@ window.CanvasEngine = class CanvasEngine {
     }
     s._box = { minX, maxX, minY, maxY };
     return s._box;
+  }
+
+  applyFloodFill(view, pt) {
+    if (!view || !view.strokeCanvas || !view.strokeCtx) return;
+    const dpr = view.dpr || 1;
+    const canvasW = view.strokeCanvas.width;
+    const canvasH = view.strokeCanvas.height;
+
+    const clickX = Math.round(pt.x * dpr);
+    const clickY = Math.round(pt.y * dpr);
+    if (clickX < 0 || clickX >= canvasW || clickY < 0 || clickY >= canvasH) return;
+
+    // Get pixel buffer from strokeCanvas
+    const imgData = view.strokeCtx.getImageData(0, 0, canvasW, canvasH);
+    const data32 = new Uint32Array(imgData.data.buffer);
+
+    let startX = clickX;
+    let startY = clickY;
+    let startIdx = startY * canvasW + startX;
+    let startAlpha = (data32[startIdx] >>> 24) & 0xFF;
+
+    // If user clicked directly on a stroke boundary, look for empty pixel nearby
+    if (startAlpha >= 40) {
+      let found = false;
+      for (let r = 1; r <= 6 && !found; r++) {
+        const offsets = [
+          [0, -r], [0, r], [-r, 0], [r, 0],
+          [-r, -r], [r, -r], [-r, r], [r, r]
+        ];
+        for (const [dx, dy] of offsets) {
+          const nx = clickX + dx;
+          const ny = clickY + dy;
+          if (nx >= 0 && nx < canvasW && ny >= 0 && ny < canvasH) {
+            const nAlpha = (data32[ny * canvasW + nx] >>> 24) & 0xFF;
+            if (nAlpha < 40) {
+              startX = nx;
+              startY = ny;
+              startIdx = startY * canvasW + startX;
+              found = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!found) return; // Completely solid area
+    }
+
+    const totalPixels = canvasW * canvasH;
+    const visited = new Uint8Array(totalPixels);
+    const queue = new Int32Array(totalPixels);
+    let head = 0;
+    let tail = 0;
+
+    queue[tail++] = startIdx;
+    visited[startIdx] = 1;
+
+    let minX = startX, maxX = startX;
+    let minY = startY, maxY = startY;
+    let isLeaking = false;
+    const edgeMargin = 2;
+    const maxPixelsAllowed = Math.floor(totalPixels * 0.75); // 75% of page max
+
+    while (head < tail) {
+      const cur = queue[head++];
+      const cx = cur % canvasW;
+      const cy = (cur / canvasW) | 0;
+
+      // Leak Check: If fill touches edge of canvas or exceeds 75% of page, it's not enclosed!
+      if (cx <= edgeMargin || cx >= canvasW - 1 - edgeMargin ||
+          cy <= edgeMargin || cy >= canvasH - 1 - edgeMargin ||
+          tail > maxPixelsAllowed) {
+        isLeaking = true;
+        break;
+      }
+
+      if (cx < minX) minX = cx;
+      if (cx > maxX) maxX = cx;
+      if (cy < minY) minY = cy;
+      if (cy > maxY) maxY = cy;
+
+      // 4-way neighbors
+      const neighbors = [
+        cur + 1,        // right
+        cur - 1,        // left
+        cur + canvasW,  // down
+        cur - canvasW   // up
+      ];
+
+      for (let i = 0; i < 4; i++) {
+        const nIdx = neighbors[i];
+        if (nIdx >= 0 && nIdx < totalPixels) {
+          // Horizontal boundary wrapping check
+          if (i === 0 && (cur % canvasW === canvasW - 1)) continue;
+          if (i === 1 && (cur % canvasW === 0)) continue;
+
+          if (!visited[nIdx]) {
+            const nAlpha = (data32[nIdx] >>> 24) & 0xFF;
+            if (nAlpha < 40) {
+              visited[nIdx] = 1;
+              queue[tail++] = nIdx;
+            }
+          }
+        }
+      }
+    }
+
+    // IF LEAKING: Cancel immediately and alert user!
+    if (isLeaking) {
+      if (window.CustomDialog && window.CustomDialog.toast) {
+        window.CustomDialog.toast('พื้นที่นี้ไม่มีกรอบปิดสนิท ไม่สามารถเทสีได้', 2200);
+      }
+      return;
+    }
+
+    // SUCCESS: Region is enclosed!
+    const boxW = maxX - minX + 1;
+    const boxH = maxY - minY + 1;
+    if (boxW <= 0 || boxH <= 0) return;
+
+    // Create offscreen canvas for filled mask
+    const fillCanvas = document.createElement('canvas');
+    fillCanvas.width = boxW;
+    fillCanvas.height = boxH;
+    const fillCtx = fillCanvas.getContext('2d');
+    const fillImgData = fillCtx.createImageData(boxW, boxH);
+    const fillData32 = new Uint32Array(fillImgData.data.buffer);
+
+    // Parse Fill Color
+    const fillColor = (window.ToolState && window.ToolState.color) || '#1C1C1E';
+    let r = 28, g = 28, b = 30;
+    if (fillColor.startsWith('#')) {
+      let hex = fillColor.slice(1);
+      if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+      if (hex.length >= 6) {
+        r = parseInt(hex.substr(0, 2), 16) || 0;
+        g = parseInt(hex.substr(2, 2), 16) || 0;
+        b = parseInt(hex.substr(4, 2), 16) || 0;
+      }
+    } else if (fillColor.startsWith('rgb')) {
+      const parts = fillColor.match(/\d+/g);
+      if (parts && parts.length >= 3) {
+        r = parseInt(parts[0], 10);
+        g = parseInt(parts[1], 10);
+        b = parseInt(parts[2], 10);
+      }
+    }
+    const color32 = (255 << 24) | (b << 16) | (g << 8) | r;
+
+    // Fill visited pixels and perform 1.5px dilation into boundary anti-aliasing
+    for (let y = minY; y <= maxY; y++) {
+      const rowOffset = y * canvasW;
+      const localRowOffset = (y - minY) * boxW;
+      for (let x = minX; x <= maxX; x++) {
+        const idx = rowOffset + x;
+        if (visited[idx]) {
+          fillData32[localRowOffset + (x - minX)] = color32;
+        } else {
+          // Boundary dilation check: if next to a visited pixel and has stroke alpha > 0,
+          // extend color slightly into the stroke so there is zero white gap!
+          const hasVisitedNeighbor = (
+            (x > minX && visited[idx - 1]) ||
+            (x < maxX && visited[idx + 1]) ||
+            (y > minY && visited[idx - canvasW]) ||
+            (y < maxY && visited[idx + canvasW])
+          );
+          if (hasVisitedNeighbor && ((data32[idx] >>> 24) & 0xFF) > 0) {
+            fillData32[localRowOffset + (x - minX)] = color32;
+          }
+        }
+      }
+    }
+
+    fillCtx.putImageData(fillImgData, 0, 0);
+
+    // Save Undo snapshot BEFORE modifying strokes
+    this.onBeforePageModified(view.index);
+
+    const fillStroke = {
+      id: 'fill-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+      tool: 'fill',
+      color: fillColor,
+      opacity: 1.0,
+      bounds: {
+        x: minX / dpr,
+        y: minY / dpr,
+        w: boxW / dpr,
+        h: boxH / dpr
+      },
+      dataUrl: fillCanvas.toDataURL('image/png'),
+      points: [
+        { x: minX / dpr, y: minY / dpr },
+        { x: (minX + boxW) / dpr, y: (minY + boxH) / dpr },
+        { x: (minX + boxW / 2) / dpr, y: (minY + boxH / 2) / dpr }
+      ],
+      _canvas: fillCanvas
+    };
+
+    if (!view.pageData.strokes) view.pageData.strokes = [];
+
+    // Place fill stroke behind pen line-art so outlines stay super sharp on top!
+    const firstNonFillIdx = view.pageData.strokes.findIndex(s => s.tool !== 'fill');
+    if (firstNonFillIdx !== -1) {
+      view.pageData.strokes.splice(firstNonFillIdx, 0, fillStroke);
+    } else {
+      view.pageData.strokes.push(fillStroke);
+    }
+
+    // Re-render strokes on canvas & notify state changed
+    this.renderPageStrokes(view);
+    this.onPageModified(view.index);
   }
 
   scheduleStrokeRedraw(view) {
@@ -2307,6 +2557,12 @@ window.CanvasEngine = class CanvasEngine {
               pt.y < box.minY - radius || pt.y > box.maxY + radius) {
             return true; // Keep stroke, outside bounds
           }
+        }
+        // Fill stroke eraser hit check
+        if (s.tool === 'fill' && s.bounds) {
+          const hit = (pt.x >= s.bounds.x - radius && pt.x <= s.bounds.x + s.bounds.w + radius && 
+                       pt.y >= s.bounds.y - radius && pt.y <= s.bounds.y + s.bounds.h + radius);
+          return !hit;
         }
         // 2. Exact squared distance check on points (avoids heavy Math.hypot / sqrt)
         const pts = s.points;
