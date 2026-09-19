@@ -432,7 +432,6 @@ window.CanvasEngine = class CanvasEngine {
     }
 
     this.activePageIndex = startIdx;
-    this.updateActivePageOnScroll();
 
     // Center viewport on target page after layout settles
     requestAnimationFrame(() => {
@@ -457,12 +456,14 @@ window.CanvasEngine = class CanvasEngine {
         } else {
           const targetContainer = this.pageViews[startIdx] && this.pageViews[startIdx].container;
           if (targetContainer) {
-            targetContainer.scrollIntoView({ behavior: 'auto', block: 'start' });
+            const vPad = parseInt(this.viewport.style.paddingTop || '300', 10);
+            const targetY = targetContainer.offsetTop;
+            this.viewport.scrollTop = Math.max(0, (targetY * this.zoom) + vPad - 30);
+            try { targetContainer.scrollIntoView({ behavior: 'auto', block: 'start' }); } catch(e) {}
           }
         }
 
         this.activePageIndex = startIdx;
-        this.updateActivePageOnScroll();
         this.onActivePageChanged(startIdx);
       });
     });
@@ -539,159 +540,162 @@ window.CanvasEngine = class CanvasEngine {
     view._renderSession = (view._renderSession || 0) + 1;
     const session = view._renderSession;
 
-    const { width, height, dpr, pageData, container } = view;
+    try {
+      const { width, height, dpr, pageData, container } = view;
 
-    const setupCanvas = (cls, isOpaque = false) => {
-      const c = document.createElement('canvas');
-      c.className = cls;
-      c.width  = Math.round(width  * dpr);
-      c.height = Math.round(height * dpr);
-      c.style.width  = '100%';
-      c.style.height = '100%';
-      // Setting alpha: false for bgCanvas eliminates alpha blending overhead in browser compositor
-      const ctx = c.getContext('2d', { alpha: !isOpaque });
-      ctx.scale(dpr, dpr);
-      return { c, ctx };
-    };
+      const setupCanvas = (cls, isOpaque = false) => {
+        const c = document.createElement('canvas');
+        c.className = cls;
+        c.width  = Math.round(width  * dpr);
+        c.height = Math.round(height * dpr);
+        c.style.width  = '100%';
+        c.style.height = '100%';
+        // Setting alpha: false for bgCanvas eliminates alpha blending overhead in browser compositor
+        const ctx = c.getContext('2d', { alpha: !isOpaque });
+        ctx.scale(dpr, dpr);
+        return { c, ctx };
+      };
 
-    const { c: bgCanvas,     ctx: bgCtx     } = setupCanvas('bg-canvas', true);
-    const { c: strokeCanvas, ctx: strokeCtx } = setupCanvas('stroke-canvas', false);
-    const { c: activeCanvas, ctx: activeCtx } = setupCanvas('active-canvas', false);
-    const { c: uiCanvas,     ctx: uiCtx     } = setupCanvas('ui-canvas', false);
+      const { c: bgCanvas,     ctx: bgCtx     } = setupCanvas('bg-canvas', true);
+      const { c: strokeCanvas, ctx: strokeCtx } = setupCanvas('stroke-canvas', false);
+      const { c: activeCanvas, ctx: activeCtx } = setupCanvas('active-canvas', false);
+      const { c: uiCanvas,     ctx: uiCtx     } = setupCanvas('ui-canvas', false);
 
-    // Immediately fill background canvas with solid white so there is NEVER a black flash or transparent gap
-    bgCtx.save();
-    bgCtx.fillStyle = '#FFFFFF';
-    bgCtx.fillRect(0, 0, width, height);
-    bgCtx.restore();
+      // Immediately fill background canvas with solid white so there is NEVER a black flash or transparent gap
+      bgCtx.save();
+      bgCtx.fillStyle = '#FFFFFF';
+      bgCtx.fillRect(0, 0, width, height);
+      bgCtx.restore();
 
-    // Insert canvases before overlays - KEEP container white background for safety
-    container.insertBefore(bgCanvas,     view.imageOverlays);
-    container.insertBefore(strokeCanvas, view.imageOverlays);
-    container.insertBefore(activeCanvas, view.imageOverlays);
-    container.insertBefore(uiCanvas,     view.imageOverlays);
-    container.style.backgroundColor = '#FFFFFF';
+      // Insert canvases before overlays - KEEP container white background for safety
+      container.insertBefore(bgCanvas,     view.imageOverlays);
+      container.insertBefore(strokeCanvas, view.imageOverlays);
+      container.insertBefore(activeCanvas, view.imageOverlays);
+      container.insertBefore(uiCanvas,     view.imageOverlays);
+      container.style.backgroundColor = '#FFFFFF';
 
-    view.bgCanvas     = bgCanvas;
-    view.strokeCanvas = strokeCanvas;
-    view.activeCanvas = activeCanvas;
-    view.uiCanvas     = uiCanvas;
-    view.bgCtx        = bgCtx;
-    view.strokeCtx    = strokeCtx;
-    view.activeCtx    = activeCtx;
-    view.uiCtx        = uiCtx;
+      view.bgCanvas     = bgCanvas;
+      view.strokeCanvas = strokeCanvas;
+      view.activeCanvas = activeCanvas;
+      view.uiCanvas     = uiCanvas;
+      view.bgCtx        = bgCtx;
+      view.strokeCtx    = strokeCtx;
+      view.activeCtx    = activeCtx;
+      view.uiCtx        = uiCtx;
 
-    // Draw background
-    if (pageData.pdfAssetId && this.storage) {
-      try {
-        let imgUrl = view._blobUrl;
-        if (!imgUrl) {
-          const blob = await this.storage.getAsset(pageData.pdfAssetId);
-          if (blob) {
-            imgUrl = URL.createObjectURL(blob);
-            view._blobUrl = imgUrl;
-            // Persistent CSS background shield: instant visibility when scrolling, zero white flash
-            container.style.backgroundImage = `url("${imgUrl}")`;
-            container.style.backgroundSize = '100% 100%';
-            container.style.backgroundRepeat = 'no-repeat';
-          }
-        }
-
-        if (view._renderSession !== session || !view.bgCanvas) return;
-
-        if (imgUrl) {
-          await new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              if (view._renderSession === session && view.bgCtx) {
-                view.bgCtx.drawImage(img, 0, 0, width, height);
-              }
-              resolve();
-            };
-            img.onerror = () => {
-              resolve();
-            };
-            img.src = imgUrl;
-          });
-        } else {
-          // On-demand rendering fallback using shared PDFEngine._docCache
-          let renderedOnDemand = false;
-          try {
-            const pdfDoc = window.PDFEngine && typeof window.PDFEngine.getPDFDoc === 'function'
-              ? await window.PDFEngine.getPDFDoc(pageData.notebookId, this.storage)
-              : null;
-
-            if (view._renderSession !== session || !view.bgCanvas) return;
-
-            if (pdfDoc) {
-              const pdfPage = await pdfDoc.getPage(view.index + 1);
-              const unscaledVp = pdfPage.getViewport({ scale: 1.0 });
-              // Dynamic scale tailored to page size (prevents 2.2x overscaling on large slides)
-              const fitScale = Math.min(1.8, Math.max(1.2, (width * dpr) / unscaledVp.width));
-              const renderVp = pdfPage.getViewport({ scale: fitScale });
-              const rW = Math.round(renderVp.width);
-              const rH = Math.round(renderVp.height);
-
-              const renderCanvas = document.createElement('canvas');
-              renderCanvas.width = rW;
-              renderCanvas.height = rH;
-              const rCtx = renderCanvas.getContext('2d', { alpha: false });
-              rCtx.fillStyle = '#FFFFFF';
-              rCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
-              await pdfPage.render({ canvasContext: rCtx, viewport: renderVp }).promise;
-
-              if (view._renderSession === session && view.bgCtx) {
-                view.bgCtx.drawImage(renderCanvas, 0, 0, width, height);
-              }
-
-              let newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/webp', 0.92));
-              if (!newBlob) {
-                newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/png'));
-              }
-              if (newBlob) {
-                await this.storage.saveAsset(pageData.pdfAssetId, newBlob);
-                if (!view._blobUrl) {
-                  view._blobUrl = URL.createObjectURL(newBlob);
-                  container.style.backgroundImage = `url("${view._blobUrl}")`;
-                  container.style.backgroundSize = '100% 100%';
-                  container.style.backgroundRepeat = 'no-repeat';
-                }
-              }
-              renderedOnDemand = true;
+      // Draw background
+      if (pageData.pdfAssetId && this.storage) {
+        try {
+          let imgUrl = view._blobUrl;
+          if (!imgUrl) {
+            const blob = await this.storage.getAsset(pageData.pdfAssetId);
+            if (blob) {
+              imgUrl = URL.createObjectURL(blob);
+              view._blobUrl = imgUrl;
+              // Persistent CSS background shield: instant visibility when scrolling, zero white flash
+              container.style.backgroundImage = `url("${imgUrl}")`;
+              container.style.backgroundSize = '100% 100%';
+              container.style.backgroundRepeat = 'no-repeat';
             }
-          } catch (e) {
-            console.warn('On-demand PDF render failed:', e);
           }
 
           if (view._renderSession !== session || !view.bgCanvas) return;
 
-          if (!renderedOnDemand) {
-            this.drawTemplateBackground(bgCtx, pageData.template || 'grid', width, height);
+          if (imgUrl) {
+            await new Promise((resolve) => {
+              const img = new Image();
+              img.onload = () => {
+                if (view._renderSession === session && view.bgCtx) {
+                  view.bgCtx.drawImage(img, 0, 0, width, height);
+                }
+                resolve();
+              };
+              img.onerror = () => {
+                resolve();
+              };
+              img.src = imgUrl;
+            });
+          } else {
+            // On-demand rendering fallback using shared PDFEngine._docCache
+            let renderedOnDemand = false;
+            try {
+              const pdfDoc = window.PDFEngine && typeof window.PDFEngine.getPDFDoc === 'function'
+                ? await window.PDFEngine.getPDFDoc(pageData.notebookId, this.storage)
+                : null;
+
+              if (view._renderSession !== session || !view.bgCanvas) return;
+
+              if (pdfDoc) {
+                const pdfPage = await pdfDoc.getPage(view.index + 1);
+                const unscaledVp = pdfPage.getViewport({ scale: 1.0 });
+                // Dynamic scale tailored to page size (prevents 2.2x overscaling on large slides)
+                const fitScale = Math.min(1.8, Math.max(1.2, (width * dpr) / unscaledVp.width));
+                const renderVp = pdfPage.getViewport({ scale: fitScale });
+                const rW = Math.round(renderVp.width);
+                const rH = Math.round(renderVp.height);
+
+                const renderCanvas = document.createElement('canvas');
+                renderCanvas.width = rW;
+                renderCanvas.height = rH;
+                const rCtx = renderCanvas.getContext('2d', { alpha: false });
+                rCtx.fillStyle = '#FFFFFF';
+                rCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
+                await pdfPage.render({ canvasContext: rCtx, viewport: renderVp }).promise;
+
+                if (view._renderSession === session && view.bgCtx) {
+                  view.bgCtx.drawImage(renderCanvas, 0, 0, width, height);
+                }
+
+                let newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/webp', 0.92));
+                if (!newBlob) {
+                  newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/png'));
+                }
+                if (newBlob) {
+                  await this.storage.saveAsset(pageData.pdfAssetId, newBlob);
+                  if (!view._blobUrl) {
+                    view._blobUrl = URL.createObjectURL(newBlob);
+                    container.style.backgroundImage = `url("${view._blobUrl}")`;
+                    container.style.backgroundSize = '100% 100%';
+                    container.style.backgroundRepeat = 'no-repeat';
+                  }
+                }
+                renderedOnDemand = true;
+              }
+            } catch (e) {
+              console.warn('On-demand PDF render failed:', e);
+            }
+
+            if (view._renderSession !== session || !view.bgCanvas) return;
+
+            if (!renderedOnDemand) {
+              this.drawTemplateBackground(bgCtx, pageData.template || 'grid', width, height);
+            }
           }
+        } catch(e) {
+          if (view._renderSession !== session || !view.bgCanvas) return;
+          this.drawTemplateBackground(bgCtx, pageData.template || 'grid', width, height);
         }
-      } catch(e) {
-        if (view._renderSession !== session || !view.bgCanvas) return;
+      } else {
         this.drawTemplateBackground(bgCtx, pageData.template || 'grid', width, height);
       }
-    } else {
-      this.drawTemplateBackground(bgCtx, pageData.template || 'grid', width, height);
+
+      if (view._renderSession !== session || !view.bgCanvas) return;
+
+      this.renderPageStrokes(view);
+      this.renderPageTextOverlays(view);
+      this.renderPageImages(view);
+
+      // Bind pointer events NOW that uiCanvas exists
+      this.bindPagePointerEvents(view);
+
+      if (this._currentCursorStyle && view.uiCanvas) {
+        view.uiCanvas.style.cursor = this._currentCursorStyle;
+      }
+
+      view.canvasReady = true;
+    } finally {
+      view.canvasLoading = false;
     }
-
-    if (view._renderSession !== session || !view.bgCanvas) return;
-
-    this.renderPageStrokes(view);
-    this.renderPageTextOverlays(view);
-    this.renderPageImages(view);
-
-    // Bind pointer events NOW that uiCanvas exists
-    this.bindPagePointerEvents(view);
-
-    if (this._currentCursorStyle && view.uiCanvas) {
-      view.uiCanvas.style.cursor = this._currentCursorStyle;
-    }
-
-    view.canvasReady   = true;
-    view.canvasLoading = false;
   }
 
   // Safely destroys canvas DOM elements and releases GPU VRAM backing store memory
@@ -2139,23 +2143,22 @@ window.CanvasEngine = class CanvasEngine {
   drawSingleStroke(ctx, stroke) {
     if (!stroke) return;
     if (stroke.tool === 'fill') {
-      if (stroke.bounds) {
+      const b = stroke.bounds || stroke.bbox;
+      if (b) {
         ctx.save();
-        if (stroke._canvas) {
-          ctx.drawImage(stroke._canvas, stroke.bounds.x, stroke.bounds.y, stroke.bounds.w, stroke.bounds.h);
-        } else if (stroke.dataUrl) {
+        if (stroke.dataUrl) {
           if (!stroke._img) {
             const img = new Image();
             img.onload = () => {
               if (ctx && ctx.canvas) {
-                ctx.drawImage(img, stroke.bounds.x, stroke.bounds.y, stroke.bounds.w, stroke.bounds.h);
+                ctx.drawImage(img, b.x, b.y, b.w, b.h);
               }
             };
             img.src = stroke.dataUrl;
             stroke._img = img;
           }
           if (stroke._img.complete && stroke._img.naturalWidth > 0) {
-            ctx.drawImage(stroke._img, stroke.bounds.x, stroke.bounds.y, stroke.bounds.w, stroke.bounds.h);
+            ctx.drawImage(stroke._img, b.x, b.y, b.w, b.h);
           }
         }
         ctx.restore();
@@ -2506,8 +2509,7 @@ window.CanvasEngine = class CanvasEngine {
         { x: minX / dpr, y: minY / dpr },
         { x: (minX + boxW) / dpr, y: (minY + boxH) / dpr },
         { x: (minX + boxW / 2) / dpr, y: (minY + boxH / 2) / dpr }
-      ],
-      _canvas: fillCanvas
+      ]
     };
 
     if (!view.pageData.strokes) view.pageData.strokes = [];

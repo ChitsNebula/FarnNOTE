@@ -8,6 +8,8 @@ window.EditorController = class EditorController {
     this.currentNotebook = null;
     this.pages = [];
     this.currentPageIndex = 0;
+    this._dirtyPages = new Set();
+    this._dbSaveTimer = null;
 
     this.undoStack = [];
     this.redoStack = [];
@@ -136,22 +138,59 @@ window.EditorController = class EditorController {
 
   handlePageModified(pageIndex) {
     const idx = pageIndex !== undefined ? pageIndex : this.currentPageIndex;
-    const page = this.pages[idx];
-    if (!page) return;
+    if (this.pages && this.pages[idx]) {
+      this._dirtyPages.add(idx);
+    }
 
     // Silent, fast background save to local IndexedDB (keeps work saved on F5 refresh, 0% lag, 0 popups)
-    clearTimeout(this._dbSaveTimer);
+    if (this._dbSaveTimer) {
+      clearTimeout(this._dbSaveTimer);
+    }
     this._dbSaveTimer = setTimeout(async () => {
-      try {
-        await window.Storage.savePage(page);
-        if (this.currentNotebook) {
-          this.currentNotebook.pageCount = this.pages.length;
-          await window.Storage.saveNotebook(this.currentNotebook);
-        }
-      } catch (e) {
-        console.warn('Local DB save failed:', e);
-      }
+      await this.flushPendingSaves();
     }, 150);
+  }
+
+  async flushPendingSaves() {
+    if (this._dbSaveTimer) {
+      clearTimeout(this._dbSaveTimer);
+      this._dbSaveTimer = null;
+    }
+
+    if (!this.pages || this.pages.length === 0) return;
+
+    // Ensure active page is included if present
+    if (this.currentPageIndex !== undefined && this.pages[this.currentPageIndex]) {
+      this._dirtyPages.add(this.currentPageIndex);
+    }
+
+    const indices = Array.from(this._dirtyPages);
+    this._dirtyPages.clear();
+
+    for (const idx of indices) {
+      const page = this.pages[idx];
+      if (page) {
+        try {
+          await window.Storage.savePage(page);
+        } catch (e) {
+          console.warn('Failed to save page to IndexedDB:', idx, e);
+        }
+      }
+    }
+
+    if (this.currentNotebook) {
+      try {
+        this.currentNotebook.pageCount = this.pages.length;
+        this.currentNotebook.lastPageIndex = this.currentPageIndex;
+        await window.Storage.saveNotebook(this.currentNotebook);
+      } catch (e) {
+        console.warn('Failed to update notebook metadata:', e);
+      }
+    }
+  }
+
+  async autoSave() {
+    await this.flushPendingSaves();
   }
 
   updateUndoRedoButtons() {
@@ -525,6 +564,10 @@ window.EditorController = class EditorController {
       if (page) {
         window.Storage.savePage(page);
       }
+      if (this.currentNotebook) {
+        this.currentNotebook.lastPageIndex = this.currentPageIndex;
+        window.Storage.saveNotebook(this.currentNotebook);
+      }
     });
 
     document.getElementById('btn-back-library').addEventListener('click', async () => {
@@ -533,6 +576,9 @@ window.EditorController = class EditorController {
         try {
           localStorage.setItem(`farmnotes_last_page_${this.currentNotebook.id}`, this.currentPageIndex);
         } catch (e) {}
+
+        // Guarantee all pending and current page changes are written to IndexedDB
+        await this.flushPendingSaves();
 
         if (this.canvasEngine && this.canvasEngine.pageViews && this.canvasEngine.pageViews[0]) {
           try {
@@ -575,14 +621,16 @@ window.EditorController = class EditorController {
       if (e.ctrlKey && e.key === 'y') { e.preventDefault(); this.redo(); }
     });
 
-    bindInstantTap(document.getElementById('btn-prev-page'), () => {
+    bindInstantTap(document.getElementById('btn-prev-page'), async () => {
       if (this.currentPageIndex > 0) {
+        await this.flushPendingSaves();
         this.canvasEngine.scrollToPage(this.currentPageIndex - 1);
       }
     });
 
-    bindInstantTap(document.getElementById('btn-next-page'), () => {
+    bindInstantTap(document.getElementById('btn-next-page'), async () => {
       if (this.currentPageIndex < this.pages.length - 1) {
+        await this.flushPendingSaves();
         this.canvasEngine.scrollToPage(this.currentPageIndex + 1);
       }
     });
@@ -1943,10 +1991,11 @@ window.EditorController = class EditorController {
       card.appendChild(meta);
 
       // Attach Click Event Listener to the WHOLE CARD container
-      card.addEventListener('click', (e) => {
+      card.addEventListener('click', async (e) => {
         if (e.target.closest('.btn-page-dropdown') || e.target.closest('.page-dropdown-menu')) return;
         const modal = document.getElementById('modal-page-overview');
         if (modal) modal.classList.add('hidden');
+        await this.flushPendingSaves();
         if (this.canvasEngine && this.canvasEngine.scrollToPage) {
           this.canvasEngine.scrollToPage(idx);
         }

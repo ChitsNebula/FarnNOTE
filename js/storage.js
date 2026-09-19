@@ -39,6 +39,44 @@ function getDB() {
   return dbPromise;
 }
 
+function _sanitizePageForStorage(page) {
+  if (!page) return page;
+  try {
+    const cleanStrokes = (page.strokes || []).map(s => {
+      const cleanS = { ...s };
+      delete cleanS._canvas;
+      delete cleanS._img;
+      delete cleanS._box;
+      return cleanS;
+    });
+
+    const cleanTextBoxes = (page.textBoxes || []).map(tb => {
+      const cleanTb = { ...tb };
+      delete cleanTb._el;
+      return cleanTb;
+    });
+
+    const cleanImages = (page.images || []).map(img => {
+      const cleanImg = { ...img };
+      delete cleanImg._el;
+      delete cleanImg._img;
+      return cleanImg;
+    });
+
+    const clean = {
+      ...page,
+      strokes: cleanStrokes,
+      textBoxes: cleanTextBoxes,
+      images: cleanImages
+    };
+    delete clean._cachedPdfUrl;
+    delete clean._renderSession;
+    return clean;
+  } catch (e) {
+    return page;
+  }
+}
+
 window.Storage = {
   getGroups() {
     try {
@@ -156,11 +194,12 @@ window.Storage = {
   },
 
   async savePage(page) {
+    const cleanPage = _sanitizePageForStorage(page);
     const db = await getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction('pages', 'readwrite');
       const store = tx.objectStore('pages');
-      const request = store.put(page);
+      const request = store.put(cleanPage);
       request.onsuccess = () => resolve(page);
       request.onerror = () => reject(request.error);
     });
