@@ -18,10 +18,10 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- App Stylesheets -->
-  <link rel="stylesheet" href="css/reset.css?v=2.13.5">
-  <link rel="stylesheet" href="css/theme.css?v=2.13.5">
-  <link rel="stylesheet" href="css/library.css?v=2.13.5">
-  <link rel="stylesheet" href="css/editor.css?v=2.13.5">
+  <link rel="stylesheet" href="css/reset.css?v=2.13.6">
+  <link rel="stylesheet" href="css/theme.css?v=2.13.6">
+  <link rel="stylesheet" href="css/library.css?v=2.13.6">
+  <link rel="stylesheet" href="css/editor.css?v=2.13.6">
 
   <!-- External Libraries: Google Identity Services, PDF.js & pdf-lib -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -31,7 +31,7 @@
   <!-- Auto-Purge Cache & Service Worker on Version Bump (Fixes Chromebook 403 & stale code) -->
   <script>
     (function() {
-      const APP_VER = '2.13.5';
+      const APP_VER = '2.13.6';
       if (localStorage.getItem('farmnotes_app_version') !== APP_VER) {
         localStorage.setItem('farmnotes_app_version', APP_VER);
         if ('caches' in window) {
@@ -880,14 +880,25 @@
             <div class="cr-drive-header">
               <div class="cr-drive-search-box">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="cr-drive-search-input" placeholder="ค้นหาไฟล์ PDF ใน Google Drive..." autocomplete="off">
+                <input type="text" id="cr-drive-search-input" placeholder="ค้นหาไฟล์หรือโฟลเดอร์ใน Google Drive..." autocomplete="off">
               </div>
-              <button class="btn-secondary btn-sm" id="btn-cr-refresh-drive" title="รีเฟรชไฟล์">
+              <button class="btn-secondary btn-sm" id="btn-cr-refresh-drive" title="รีเฟรช">
                 <i class="fa-solid fa-rotate-right" id="icon-cr-refresh-drive"></i> รีเฟรช
               </button>
             </div>
+
+            <!-- Breadcrumbs Navigation Bar -->
+            <div class="cr-drive-nav-bar" id="cr-drive-nav-bar">
+              <button class="btn-secondary btn-sm cr-drive-btn-up" id="btn-cr-drive-up" title="ขึ้นไปโฟลเดอร์ก่อนหน้า" disabled>
+                <i class="fa-solid fa-arrow-left"></i> ย้อนกลับ
+              </button>
+              <div class="cr-drive-breadcrumbs" id="cr-drive-breadcrumbs">
+                <span class="cr-drive-crumb active"><i class="fa-brands fa-google-drive"></i> ไดรฟ์ของฉัน</span>
+              </div>
+            </div>
+
             <div id="cr-drive-files-list">
-              <!-- Dynamically populated with Drive PDF files -->
+              <!-- Dynamically populated with Folders and Drive PDF files -->
             </div>
           </div>
 
@@ -924,14 +935,14 @@
 
   <!-- Standard Application Scripts (No module / Works on file:// protocol!) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/tools.js?v=2.13.5"></script>
-  <script src="js/storage.js?v=2.13.5"></script>
-  <script src="js/canvas.js?v=2.13.5"></script>
-  <script src="js/pdf.js?v=2.13.5"></script>
-  <script src="js/classroom.js?v=2.13.5"></script>
-  <script src="js/library.js?v=2.13.5"></script>
-  <script src="js/editor.js?v=2.13.5"></script>
-  <script src="js/app.js?v=2.13.5"></script>
+  <script src="js/tools.js?v=2.13.6"></script>
+  <script src="js/storage.js?v=2.13.6"></script>
+  <script src="js/canvas.js?v=2.13.6"></script>
+  <script src="js/pdf.js?v=2.13.6"></script>
+  <script src="js/classroom.js?v=2.13.6"></script>
+  <script src="js/library.js?v=2.13.6"></script>
+  <script src="js/editor.js?v=2.13.6"></script>
+  <script src="js/app.js?v=2.13.6"></script>
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
       window.addEventListener('load', () => {

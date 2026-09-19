@@ -1487,3 +1487,164 @@
   transform: translateY(-1px);
 }
 
+/* Google Drive Breadcrumbs & Navigation Bar (v2.13.6) */
+.cr-drive-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #FFFFFF;
+  border: 1px solid #E5E5EA;
+  border-radius: 10px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.cr-drive-btn-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid #D1D1D6;
+  background: #FFFFFF;
+  color: #1D1D1F;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.cr-drive-btn-up:hover:not(:disabled) {
+  background: #F2F2F7;
+  border-color: #C7C7CC;
+}
+
+.cr-drive-btn-up:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: #E5E5EA;
+}
+
+.cr-drive-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  flex: 1;
+}
+
+.cr-drive-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #007AFF;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.cr-drive-crumb:hover:not(.active) {
+  background: rgba(0, 122, 255, 0.08);
+  text-decoration: underline;
+}
+
+.cr-drive-crumb.active {
+  color: #1D1D1F;
+  font-weight: 600;
+  cursor: default;
+}
+
+.cr-drive-crumb-sep {
+  color: #C7C7CC;
+  font-size: 10px;
+}
+
+/* Drive Section Titles (Folders vs Files) */
+.cr-drive-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5C5E62;
+  margin: 14px 0 10px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.cr-drive-section-title i {
+  color: #8E8E93;
+}
+
+/* Drive Folders Grid & Card (Google Drive Style) */
+.cr-drive-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.cr-drive-folder-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border: 1px solid #E5E5EA;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.cr-drive-folder-card:hover {
+  background: #F9FAFB;
+  border-color: #007AFF;
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.cr-drive-folder-card:active {
+  transform: translateY(0);
+}
+
+.cr-drive-folder-icon {
+  font-size: 18px;
+  color: #5F6368;
+  flex-shrink: 0;
+  transition: color 0.16s ease;
+}
+
+.cr-drive-folder-card:hover .cr-drive-folder-icon {
+  color: #007AFF;
+}
+
+.cr-drive-folder-name {
+  flex: 1;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #202124;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cr-drive-folder-arrow {
+  color: #C7C7CC;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.cr-drive-folder-card:hover .cr-drive-folder-arrow {
+  opacity: 1;
+  transform: translateX(2px);
+  color: #007AFF;
+}
+
+

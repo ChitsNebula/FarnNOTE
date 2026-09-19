@@ -31,6 +31,7 @@
       } catch (e) {
         this.driveFilesCache = [];
       }
+      this.driveFolderStack = [{ id: 'root', name: 'ไดรฟ์ของฉัน' }];
       this.currentCourse = null;
       this.tokenClient = null;
 
@@ -40,6 +41,8 @@
       this.coursesView = null;
       this.materialsView = null;
       this.driveView = null;
+      this.driveBreadcrumbsEl = null;
+      this.driveBtnUp = null;
       this.linkImportView = null;
     }
 
@@ -70,6 +73,8 @@
       this.materialsListEl = document.getElementById('cr-materials-list');
       this.driveFilesListEl = document.getElementById('cr-drive-files-list');
       this.driveSearchInput = document.getElementById('cr-drive-search-input');
+      this.driveBreadcrumbsEl = document.getElementById('cr-drive-breadcrumbs');
+      this.driveBtnUp = document.getElementById('btn-cr-drive-up');
       this.accountBanner = document.getElementById('cr-account-banner');
       this.courseHeaderTitle = document.getElementById('cr-course-header-title');
       this.courseHeaderSubtitle = document.getElementById('cr-course-header-subtitle');
@@ -165,11 +170,7 @@
         tabDrive.addEventListener('click', () => {
           setTabActive(tabDrive);
           this.showView('drive');
-          if (!this.driveFilesCache || this.driveFilesCache.length === 0) {
-            this.loadDriveFiles();
-          } else {
-            this.renderDriveFiles(this.driveFilesCache);
-          }
+          this.loadDriveFiles();
         });
       }
 
@@ -177,6 +178,13 @@
         tabLink.addEventListener('click', () => {
           setTabActive(tabLink);
           this.showView('link');
+        });
+      }
+
+      // Drive Back / Up button
+      if (this.driveBtnUp) {
+        this.driveBtnUp.addEventListener('click', () => {
+          this.navigateUpDriveFolder();
         });
       }
 
@@ -784,7 +792,85 @@
       }
     }
 
-    // ── Google Drive Explorer Methods (v2.13.5) ──────────────────────────────
+    // ── Google Drive Explorer Methods (v2.13.6 - Folder Explorer) ───────────
+
+    navigateToFolder(folderId, folderName) {
+      if (this.driveSearchInput) this.driveSearchInput.value = '';
+      this.driveFolderStack.push({ id: folderId, name: folderName });
+      this.loadDriveFiles();
+    }
+
+    navigateToCrumbIndex(index) {
+      if (this.driveSearchInput) this.driveSearchInput.value = '';
+      if (index >= 0 && index < this.driveFolderStack.length) {
+        this.driveFolderStack = this.driveFolderStack.slice(0, index + 1);
+        this.loadDriveFiles();
+      }
+    }
+
+    navigateUpDriveFolder() {
+      if (this.driveSearchInput && this.driveSearchInput.value.trim()) {
+        this.driveSearchInput.value = '';
+        this.loadDriveFiles();
+        return;
+      }
+      if (this.driveFolderStack.length > 1) {
+        this.driveFolderStack.pop();
+        this.loadDriveFiles();
+      }
+    }
+
+    renderDriveBreadcrumbs(searchQuery = '') {
+      if (!this.driveBreadcrumbsEl) return;
+
+      if (searchQuery) {
+        this.driveBreadcrumbsEl.innerHTML = `
+          <span class="cr-drive-crumb" data-crumb-index="root"><i class="fa-brands fa-google-drive"></i> ไดรฟ์ของฉัน</span>
+          <span class="cr-drive-crumb-sep"><i class="fa-solid fa-chevron-right"></i></span>
+          <span class="cr-drive-crumb active"><i class="fa-solid fa-magnifying-glass"></i> ค้นหา "${this.escapeHtml(searchQuery)}"</span>
+        `;
+        const rootCrumb = this.driveBreadcrumbsEl.querySelector('[data-crumb-index="root"]');
+        if (rootCrumb) {
+          rootCrumb.addEventListener('click', () => {
+            if (this.driveSearchInput) this.driveSearchInput.value = '';
+            this.driveFolderStack = [{ id: 'root', name: 'ไดรฟ์ของฉัน' }];
+            this.loadDriveFiles();
+          });
+        }
+        if (this.driveBtnUp) this.driveBtnUp.disabled = false;
+        return;
+      }
+
+      let html = '';
+      this.driveFolderStack.forEach((folder, idx) => {
+        const isLast = idx === this.driveFolderStack.length - 1;
+        const icon = idx === 0 ? '<i class="fa-brands fa-google-drive"></i> ' : '<i class="fa-solid fa-folder"></i> ';
+
+        if (idx > 0) {
+          html += `<span class="cr-drive-crumb-sep"><i class="fa-solid fa-chevron-right"></i></span>`;
+        }
+
+        if (isLast) {
+          html += `<span class="cr-drive-crumb active">${icon}${this.escapeHtml(folder.name)}</span>`;
+        } else {
+          html += `<span class="cr-drive-crumb" data-crumb-index="${idx}">${icon}${this.escapeHtml(folder.name)}</span>`;
+        }
+      });
+
+      this.driveBreadcrumbsEl.innerHTML = html;
+
+      // Attach breadcrumb click listeners
+      this.driveBreadcrumbsEl.querySelectorAll('.cr-drive-crumb[data-crumb-index]').forEach(el => {
+        el.addEventListener('click', () => {
+          const idx = parseInt(el.dataset.crumbIndex, 10);
+          this.navigateToCrumbIndex(idx);
+        });
+      });
+
+      if (this.driveBtnUp) {
+        this.driveBtnUp.disabled = this.driveFolderStack.length <= 1;
+      }
+    }
 
     async loadDriveFiles(searchQuery = '', silent = false) {
       if (!this.accessToken) {
@@ -795,7 +881,7 @@
                 <i class="fa-brands fa-google-drive fa-2x"></i>
               </div>
               <h3>เข้าสู่ระบบเพื่อดูไฟล์ใน Google Drive</h3>
-              <p>เข้าสู่ระบบบัญชี Google ของคุณเพื่อเข้าถึงเอกสารและชีท PDF ทั้งหมดในไดรฟ์</p>
+              <p>เข้าสู่ระบบบัญชี Google ของคุณเพื่อเข้าถึงโฟลเดอร์และเอกสาร PDF ทั้งหมดในไดรฟ์</p>
               <button class="btn-primary cr-big-login-btn" id="btn-cr-login-drive">
                 <i class="fa-brands fa-google"></i> เข้าสู่ระบบด้วย Google
               </button>
@@ -814,23 +900,29 @@
         this.driveFilesListEl.innerHTML = `
           <div class="cr-loading-state">
             <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
-            <p>กำลังค้นหาไฟล์ PDF ใน Google Drive...</p>
+            <p>กำลังเปิดอ่านไดรฟ์...</p>
           </div>
         `;
       }
 
+      this.renderDriveBreadcrumbs(searchQuery);
+
       try {
-        let q = "mimeType = 'application/pdf' and trashed = false";
+        const currentFolder = this.driveFolderStack[this.driveFolderStack.length - 1] || { id: 'root', name: 'ไดรฟ์ของฉัน' };
+
+        let q = '';
         if (searchQuery) {
           const safeQ = searchQuery.replace(/'/g, "\\'");
-          q += ` and name contains '${safeQ}'`;
+          q = `trashed = false and (name contains '${safeQ}') and (mimeType = 'application/vnd.google-apps.folder' or mimeType = 'application/pdf')`;
+        } else {
+          q = `'${currentFolder.id}' in parents and trashed = false and (mimeType = 'application/vnd.google-apps.folder' or mimeType = 'application/pdf')`;
         }
 
         const url = new URL('https://www.googleapis.com/drive/v3/files');
         url.searchParams.set('q', q);
         url.searchParams.set('fields', 'files(id, name, mimeType, modifiedTime, size, iconLink, thumbnailLink, webViewLink)');
-        url.searchParams.set('orderBy', 'modifiedTime desc');
-        url.searchParams.set('pageSize', '50');
+        url.searchParams.set('orderBy', 'folder,name');
+        url.searchParams.set('pageSize', '100');
 
         const res = await fetch(url.toString(), {
           headers: { Authorization: `Bearer ${this.accessToken}` }
@@ -848,19 +940,27 @@
         }
 
         const data = await res.json();
-        const files = data.files || [];
-        if (!searchQuery) {
-          this.driveFilesCache = files;
-          localStorage.setItem('farmnotes_google_drive_cache', JSON.stringify(files));
-        }
-        this.renderDriveFiles(files, searchQuery);
+        const items = data.files || [];
+
+        // Partition folders and PDF files
+        const folders = [];
+        const pdfFiles = [];
+        items.forEach(item => {
+          if (item.mimeType === 'application/vnd.google-apps.folder') {
+            folders.push(item);
+          } else if (item.mimeType === 'application/pdf') {
+            pdfFiles.push(item);
+          }
+        });
+
+        this.renderDriveContent(folders, pdfFiles, searchQuery);
       } catch (err) {
-        console.error('Failed to load Drive files:', err);
+        console.error('Failed to load Drive content:', err);
         if (!silent && this.driveFilesListEl) {
           this.driveFilesListEl.innerHTML = `
             <div class="cr-error-state">
               <i class="fa-solid fa-triangle-exclamation fa-2x"></i>
-              <h3>ไม่สามารถโหลดไฟล์จาก Google Drive ได้</h3>
+              <h3>ไม่สามารถโหลดเนื้อหาจาก Google Drive ได้</h3>
               <p>${this.escapeHtml(err.message)}</p>
               <button class="btn-secondary" id="btn-cr-retry-drive">
                 <i class="fa-solid fa-rotate-right"></i> ลองใหม่
@@ -875,54 +975,99 @@
       }
     }
 
-    renderDriveFiles(files, query = '') {
+    renderDriveContent(folders, pdfFiles, query = '') {
       if (!this.driveFilesListEl) return;
 
-      if (!files || files.length === 0) {
+      if (folders.length === 0 && pdfFiles.length === 0) {
         this.driveFilesListEl.innerHTML = `
           <div class="cr-empty-state">
             <div class="cr-empty-icon">
-              <i class="fa-solid fa-file-circle-question fa-2x"></i>
+              <i class="fa-regular fa-folder-open fa-2x"></i>
             </div>
-            <h3>${query ? 'ไม่พบไฟล์ที่ตรงกับคำค้นหา' : 'ไม่พบไฟล์ PDF ใน Google Drive'}</h3>
-            <p>${query ? `ไม่มีไฟล์ PDF ชื่อ "${this.escapeHtml(query)}" ในไดรฟ์ของคุณ` : 'เมื่อคุณบันทึกหรืออัปโหลดไฟล์ PDF ไว้ใน Google Drive ไฟล์จะปรากฏที่นี่ทันที'}</p>
+            <h3>${query ? 'ไม่พบโฟลเดอร์หรือไฟล์ PDF ที่ค้นหา' : 'โฟลเดอร์นี้ไม่มีไฟล์หรือโฟลเดอร์ย่อย'}</h3>
+            <p>${query ? `ไม่มีไฟล์หรือโฟลเดอร์ชื่อ "${this.escapeHtml(query)}"` : 'ไม่พบโฟลเดอร์หรือเอกสาร PDF ในตำแหน่งนี้'}</p>
           </div>
         `;
         return;
       }
 
-      let html = '<div class="cr-drive-grid">';
-      files.forEach(file => {
-        const sizeStr = file.size ? this.formatFileSize(file.size) : 'PDF';
-        const dateStr = file.modifiedTime ? this.formatDate(file.modifiedTime) : '';
+      let html = '';
 
+      // 1. Folders Section
+      if (folders.length > 0) {
         html += `
-          <div class="cr-drive-file-card">
-            <div class="cr-drive-file-top">
-              <div class="cr-drive-file-icon">
-                <i class="fa-solid fa-file-pdf"></i>
+          <div class="cr-drive-section-title">
+            <i class="fa-solid fa-folder"></i> โฟลเดอร์ (${folders.length})
+          </div>
+          <div class="cr-drive-folder-grid">
+        `;
+        folders.forEach(folder => {
+          html += `
+            <div class="cr-drive-folder-card" data-folder-id="${folder.id}" data-folder-name="${this.escapeHtml(folder.name)}">
+              <div class="cr-drive-folder-icon">
+                <i class="fa-solid fa-folder"></i>
               </div>
-              <div class="cr-drive-file-details">
-                <h4 class="cr-drive-file-name" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</h4>
-                <div class="cr-drive-file-meta">
-                  <span>${sizeStr}</span>
-                  ${dateStr ? `<span>•</span><span>${dateStr}</span>` : ''}
+              <div class="cr-drive-folder-name" title="${this.escapeHtml(folder.name)}">
+                ${this.escapeHtml(folder.name)}
+              </div>
+              <div class="cr-drive-folder-arrow">
+                <i class="fa-solid fa-chevron-right"></i>
+              </div>
+            </div>
+          `;
+        });
+        html += `</div>`;
+      }
+
+      // 2. PDF Files Section
+      if (pdfFiles.length > 0) {
+        html += `
+          <div class="cr-drive-section-title">
+            <i class="fa-solid fa-file-pdf"></i> เอกสาร PDF (${pdfFiles.length})
+          </div>
+          <div class="cr-drive-grid">
+        `;
+        pdfFiles.forEach(file => {
+          const sizeStr = file.size ? this.formatFileSize(file.size) : 'PDF';
+          const dateStr = file.modifiedTime ? this.formatDate(file.modifiedTime) : '';
+
+          html += `
+            <div class="cr-drive-file-card">
+              <div class="cr-drive-file-top">
+                <div class="cr-drive-file-icon">
+                  <i class="fa-solid fa-file-pdf"></i>
+                </div>
+                <div class="cr-drive-file-details">
+                  <h4 class="cr-drive-file-name" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</h4>
+                  <div class="cr-drive-file-meta">
+                    <span>${sizeStr}</span>
+                    ${dateStr ? `<span>•</span><span>${dateStr}</span>` : ''}
+                  </div>
                 </div>
               </div>
+              <div class="cr-drive-file-actions">
+                <button class="btn-drive-import cr-import-drive-file-btn" data-file-id="${file.id}" data-file-name="${this.escapeHtml(file.name)}">
+                  <i class="fa-solid fa-file-import"></i> นำเข้าเป็นสมุด
+                </button>
+              </div>
             </div>
-            <div class="cr-drive-file-actions">
-              <button class="btn-drive-import cr-import-drive-file-btn" data-file-id="${file.id}" data-file-name="${this.escapeHtml(file.name)}">
-                <i class="fa-solid fa-file-import"></i> นำเข้าเป็นสมุด
-              </button>
-            </div>
-          </div>
-        `;
-      });
-      html += '</div>';
+          `;
+        });
+        html += `</div>`;
+      }
 
       this.driveFilesListEl.innerHTML = html;
 
-      // Attach click listeners to import buttons
+      // Attach Folder Click Listeners (drill-down inside folder)
+      this.driveFilesListEl.querySelectorAll('.cr-drive-folder-card').forEach(fCard => {
+        fCard.addEventListener('click', () => {
+          const fId = fCard.dataset.folderId;
+          const fName = fCard.dataset.folderName;
+          this.navigateToFolder(fId, fName);
+        });
+      });
+
+      // Attach PDF Import Click Listeners
       this.driveFilesListEl.querySelectorAll('.cr-import-drive-file-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
