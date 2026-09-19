@@ -25,6 +25,12 @@
       } catch (e) {
         this.coursesCache = [];
       }
+      try {
+        const savedDrive = localStorage.getItem('farmnotes_google_drive_cache');
+        this.driveFilesCache = savedDrive ? JSON.parse(savedDrive) : [];
+      } catch (e) {
+        this.driveFilesCache = [];
+      }
       this.currentCourse = null;
       this.tokenClient = null;
 
@@ -33,6 +39,7 @@
       this.setupView = null;
       this.coursesView = null;
       this.materialsView = null;
+      this.driveView = null;
       this.linkImportView = null;
     }
 
@@ -56,10 +63,13 @@
       this.setupView = document.getElementById('cr-view-setup');
       this.coursesView = document.getElementById('cr-view-courses');
       this.materialsView = document.getElementById('cr-view-materials');
+      this.driveView = document.getElementById('cr-view-drive');
       this.linkImportView = document.getElementById('cr-view-link');
 
       this.coursesListEl = document.getElementById('cr-courses-list');
       this.materialsListEl = document.getElementById('cr-materials-list');
+      this.driveFilesListEl = document.getElementById('cr-drive-files-list');
+      this.driveSearchInput = document.getElementById('cr-drive-search-input');
       this.accountBanner = document.getElementById('cr-account-banner');
       this.courseHeaderTitle = document.getElementById('cr-course-header-title');
       this.courseHeaderSubtitle = document.getElementById('cr-course-header-subtitle');
@@ -129,24 +139,66 @@
         });
       }
 
-      // Tab switcher inside modal
+      // Tab switcher inside modal (Courses vs Google Drive vs Direct Link)
       const tabCourses = document.getElementById('tab-cr-courses');
+      const tabDrive = document.getElementById('tab-cr-drive');
       const tabLink = document.getElementById('tab-cr-link');
-      if (tabCourses && tabLink) {
+
+      const setTabActive = (activeTab) => {
+        [tabCourses, tabDrive, tabLink].forEach(t => {
+          if (t) t.classList.toggle('active', t === activeTab);
+        });
+      };
+
+      if (tabCourses) {
         tabCourses.addEventListener('click', () => {
-          tabCourses.classList.add('active');
-          tabLink.classList.remove('active');
+          setTabActive(tabCourses);
           if (this.currentCourse) {
             this.showView('materials');
           } else {
             this.showView('courses');
           }
         });
+      }
 
+      if (tabDrive) {
+        tabDrive.addEventListener('click', () => {
+          setTabActive(tabDrive);
+          this.showView('drive');
+          if (!this.driveFilesCache || this.driveFilesCache.length === 0) {
+            this.loadDriveFiles();
+          } else {
+            this.renderDriveFiles(this.driveFilesCache);
+          }
+        });
+      }
+
+      if (tabLink) {
         tabLink.addEventListener('click', () => {
-          tabLink.classList.add('active');
-          tabCourses.classList.remove('active');
+          setTabActive(tabLink);
           this.showView('link');
+        });
+      }
+
+      // Drive search input (debounce 350ms)
+      const driveSearchInput = document.getElementById('cr-drive-search-input');
+      let driveSearchTimeout = null;
+      if (driveSearchInput) {
+        driveSearchInput.addEventListener('input', (e) => {
+          const q = e.target.value.trim();
+          clearTimeout(driveSearchTimeout);
+          driveSearchTimeout = setTimeout(() => {
+            this.loadDriveFiles(q);
+          }, 350);
+        });
+      }
+
+      // Drive refresh button
+      const btnRefreshDrive = document.getElementById('btn-cr-refresh-drive');
+      if (btnRefreshDrive) {
+        btnRefreshDrive.addEventListener('click', () => {
+          const q = driveSearchInput ? driveSearchInput.value.trim() : '';
+          this.loadDriveFiles(q);
         });
       }
 
@@ -233,16 +285,18 @@
     }
 
     showView(viewName) {
-      if (!this.setupView || !this.coursesView || !this.materialsView || !this.linkImportView) return;
+      if (!this.setupView || !this.coursesView || !this.materialsView || !this.linkImportView || !this.driveView) return;
 
       this.setupView.classList.add('hidden');
       this.coursesView.classList.add('hidden');
       this.materialsView.classList.add('hidden');
+      this.driveView.classList.add('hidden');
       this.linkImportView.classList.add('hidden');
 
       if (viewName === 'setup') this.setupView.classList.remove('hidden');
       if (viewName === 'courses') this.coursesView.classList.remove('hidden');
       if (viewName === 'materials') this.materialsView.classList.remove('hidden');
+      if (viewName === 'drive') this.driveView.classList.remove('hidden');
       if (viewName === 'link') this.linkImportView.classList.remove('hidden');
     }
 
@@ -373,11 +427,13 @@
       this.tokenExpiresAt = 0;
       this.currentUser = null;
       this.coursesCache = [];
+      this.driveFilesCache = [];
       this.currentCourse = null;
       localStorage.removeItem('farmnotes_google_access_token');
       localStorage.removeItem('farmnotes_google_token_expires_at');
       localStorage.removeItem('farmnotes_google_user_profile');
       localStorage.removeItem('farmnotes_google_courses_cache');
+      localStorage.removeItem('farmnotes_google_drive_cache');
       this.showToast('ออกจากระบบเรียบร้อยแล้ว', 2000);
       this.render();
     }
@@ -725,6 +781,172 @@
         } else {
           alert('เกิดข้อผิดพลาดในการนำเข้า: ' + err.message);
         }
+      }
+    }
+
+    // ── Google Drive Explorer Methods (v2.13.5) ──────────────────────────────
+
+    async loadDriveFiles(searchQuery = '', silent = false) {
+      if (!this.accessToken) {
+        if (!silent && this.driveFilesListEl) {
+          this.driveFilesListEl.innerHTML = `
+            <div class="cr-empty-state">
+              <div class="cr-empty-icon" style="color: #0F9D58;">
+                <i class="fa-brands fa-google-drive fa-2x"></i>
+              </div>
+              <h3>เข้าสู่ระบบเพื่อดูไฟล์ใน Google Drive</h3>
+              <p>เข้าสู่ระบบบัญชี Google ของคุณเพื่อเข้าถึงเอกสารและชีท PDF ทั้งหมดในไดรฟ์</p>
+              <button class="btn-primary cr-big-login-btn" id="btn-cr-login-drive">
+                <i class="fa-brands fa-google"></i> เข้าสู่ระบบด้วย Google
+              </button>
+            </div>
+          `;
+          const btn = this.driveFilesListEl.querySelector('#btn-cr-login-drive');
+          if (btn) btn.addEventListener('click', () => this.requestLogin());
+        }
+        return;
+      }
+
+      const refreshIcon = document.getElementById('icon-cr-refresh-drive');
+      if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+      if (!silent && this.driveFilesListEl) {
+        this.driveFilesListEl.innerHTML = `
+          <div class="cr-loading-state">
+            <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
+            <p>กำลังค้นหาไฟล์ PDF ใน Google Drive...</p>
+          </div>
+        `;
+      }
+
+      try {
+        let q = "mimeType = 'application/pdf' and trashed = false";
+        if (searchQuery) {
+          const safeQ = searchQuery.replace(/'/g, "\\'");
+          q += ` and name contains '${safeQ}'`;
+        }
+
+        const url = new URL('https://www.googleapis.com/drive/v3/files');
+        url.searchParams.set('q', q);
+        url.searchParams.set('fields', 'files(id, name, mimeType, modifiedTime, size, iconLink, thumbnailLink, webViewLink)');
+        url.searchParams.set('orderBy', 'modifiedTime desc');
+        url.searchParams.set('pageSize', '50');
+
+        const res = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${this.accessToken}` }
+        });
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            this.accessToken = null;
+            localStorage.removeItem('farmnotes_google_access_token');
+            this.trySilentRefresh();
+            return;
+          }
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        const files = data.files || [];
+        if (!searchQuery) {
+          this.driveFilesCache = files;
+          localStorage.setItem('farmnotes_google_drive_cache', JSON.stringify(files));
+        }
+        this.renderDriveFiles(files, searchQuery);
+      } catch (err) {
+        console.error('Failed to load Drive files:', err);
+        if (!silent && this.driveFilesListEl) {
+          this.driveFilesListEl.innerHTML = `
+            <div class="cr-error-state">
+              <i class="fa-solid fa-triangle-exclamation fa-2x"></i>
+              <h3>ไม่สามารถโหลดไฟล์จาก Google Drive ได้</h3>
+              <p>${this.escapeHtml(err.message)}</p>
+              <button class="btn-secondary" id="btn-cr-retry-drive">
+                <i class="fa-solid fa-rotate-right"></i> ลองใหม่
+              </button>
+            </div>
+          `;
+          const rBtn = this.driveFilesListEl.querySelector('#btn-cr-retry-drive');
+          if (rBtn) rBtn.addEventListener('click', () => this.loadDriveFiles(searchQuery));
+        }
+      } finally {
+        if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+      }
+    }
+
+    renderDriveFiles(files, query = '') {
+      if (!this.driveFilesListEl) return;
+
+      if (!files || files.length === 0) {
+        this.driveFilesListEl.innerHTML = `
+          <div class="cr-empty-state">
+            <div class="cr-empty-icon">
+              <i class="fa-solid fa-file-circle-question fa-2x"></i>
+            </div>
+            <h3>${query ? 'ไม่พบไฟล์ที่ตรงกับคำค้นหา' : 'ไม่พบไฟล์ PDF ใน Google Drive'}</h3>
+            <p>${query ? `ไม่มีไฟล์ PDF ชื่อ "${this.escapeHtml(query)}" ในไดรฟ์ของคุณ` : 'เมื่อคุณบันทึกหรืออัปโหลดไฟล์ PDF ไว้ใน Google Drive ไฟล์จะปรากฏที่นี่ทันที'}</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '<div class="cr-drive-grid">';
+      files.forEach(file => {
+        const sizeStr = file.size ? this.formatFileSize(file.size) : 'PDF';
+        const dateStr = file.modifiedTime ? this.formatDate(file.modifiedTime) : '';
+
+        html += `
+          <div class="cr-drive-file-card">
+            <div class="cr-drive-file-top">
+              <div class="cr-drive-file-icon">
+                <i class="fa-solid fa-file-pdf"></i>
+              </div>
+              <div class="cr-drive-file-details">
+                <h4 class="cr-drive-file-name" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</h4>
+                <div class="cr-drive-file-meta">
+                  <span>${sizeStr}</span>
+                  ${dateStr ? `<span>•</span><span>${dateStr}</span>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="cr-drive-file-actions">
+              <button class="btn-drive-import cr-import-drive-file-btn" data-file-id="${file.id}" data-file-name="${this.escapeHtml(file.name)}">
+                <i class="fa-solid fa-file-import"></i> นำเข้าเป็นสมุด
+              </button>
+            </div>
+          </div>
+        `;
+      });
+      html += '</div>';
+
+      this.driveFilesListEl.innerHTML = html;
+
+      // Attach click listeners to import buttons
+      this.driveFilesListEl.querySelectorAll('.cr-import-drive-file-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const fId = btn.dataset.fileId;
+          const fName = btn.dataset.fileName;
+          this.importDrivePdf(fId, fName, btn);
+        });
+      });
+    }
+
+    formatFileSize(bytes) {
+      const b = parseInt(bytes, 10);
+      if (isNaN(b) || b === 0) return '0 B';
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+      return (b / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    formatDate(isoString) {
+      try {
+        const d = new Date(isoString);
+        return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+      } catch (e) {
+        return '';
       }
     }
 
