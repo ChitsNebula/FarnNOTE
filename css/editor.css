@@ -288,7 +288,10 @@
   justify-content: center;
   font-size: 16px;
   color: var(--gn-text-secondary);
-  transition: all var(--transition-fast);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background-color 0.18s ease,
+              box-shadow 0.18s ease,
+              color 0.18s ease;
   position: relative;
   touch-action: none !important;
   user-select: none;
@@ -299,14 +302,126 @@
 .tool-btn > * {
   pointer-events: none;
 }
-.tool-btn:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-  color: var(--gn-text-primary);
+
+/* Individual Tool Colors - Inactive State (v2.13.8) */
+.tool-btn[data-tool="pen"] {
+  color: #007AFF;
 }
+.tool-btn[data-tool="highlighter"] {
+  color: #F59E0B;
+}
+.tool-btn[data-tool="eraser"] {
+  color: #FF2D55;
+}
+.tool-btn[data-tool="shape"] {
+  color: #6366F1;
+}
+.tool-btn[data-tool="lasso"] {
+  color: #A855F7;
+}
+.tool-btn[data-tool="lens"] {
+  color: #10B981;
+}
+.tool-btn[data-tool="text"] {
+  color: #0284C7;
+}
+.tool-btn[data-tool="image"] {
+  color: #F97316;
+}
+.tool-btn[data-tool="laser"] {
+  color: #EC4899;
+}
+
+/* Position Toggle Button */
+#btn-toggle-toolbar-pos {
+  color: #8E8E93;
+}
+#btn-toggle-toolbar-pos:hover {
+  color: #1C1C1E;
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+/* Hover State - Soft Pastel Tint + Spring Pop */
+.tool-btn:not(.active):hover {
+  transform: translateY(-2px) scale(1.08);
+}
+.tool-btn[data-tool="pen"]:not(.active):hover {
+  background-color: rgba(0, 122, 255, 0.12);
+}
+.tool-btn[data-tool="highlighter"]:not(.active):hover {
+  background-color: rgba(245, 158, 11, 0.14);
+}
+.tool-btn[data-tool="eraser"]:not(.active):hover {
+  background-color: rgba(255, 45, 85, 0.12);
+}
+.tool-btn[data-tool="shape"]:not(.active):hover {
+  background-color: rgba(99, 102, 241, 0.12);
+}
+.tool-btn[data-tool="lasso"]:not(.active):hover {
+  background-color: rgba(168, 85, 247, 0.12);
+}
+.tool-btn[data-tool="lens"]:not(.active):hover {
+  background-color: rgba(16, 185, 129, 0.12);
+}
+.tool-btn[data-tool="text"]:not(.active):hover {
+  background-color: rgba(2, 132, 199, 0.12);
+}
+.tool-btn[data-tool="image"]:not(.active):hover {
+  background-color: rgba(249, 115, 22, 0.12);
+}
+.tool-btn[data-tool="laser"]:not(.active):hover {
+  background-color: rgba(236, 72, 153, 0.12);
+}
+
+/* Active State: Rich Vivid Gradient + Signature Shadow Glow */
 .tool-btn.active {
-  background-color: var(--gn-orange);
-  color: #FFFFFF;
-  box-shadow: 0 2px 8px rgba(255, 149, 0, 0.4);
+  color: #FFFFFF !important;
+  transform: scale(1.08);
+}
+
+.tool-btn[data-tool="pen"].active {
+  background: linear-gradient(135deg, #007AFF, #0055D4);
+  box-shadow: 0 4px 14px rgba(0, 122, 255, 0.45);
+}
+
+.tool-btn[data-tool="highlighter"].active {
+  background: linear-gradient(135deg, #FFB800, #F59E0B);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.45);
+}
+
+.tool-btn[data-tool="eraser"].active {
+  background: linear-gradient(135deg, #FF375F, #FF2D55);
+  box-shadow: 0 4px 14px rgba(255, 45, 85, 0.45);
+}
+
+.tool-btn[data-tool="shape"].active {
+  background: linear-gradient(135deg, #6366F1, #4F46E5);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45);
+}
+
+.tool-btn[data-tool="lasso"].active {
+  background: linear-gradient(135deg, #A855F7, #9333EA);
+  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.45);
+}
+
+.tool-btn[data-tool="lens"].active {
+  background: linear-gradient(135deg, #10B981, #059669);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45);
+}
+
+.tool-btn[data-tool="text"].active {
+  background: linear-gradient(135deg, #0EA5E9, #0284C7);
+  box-shadow: 0 4px 14px rgba(14, 165, 233, 0.45);
+}
+
+.tool-btn[data-tool="image"].active {
+  background: linear-gradient(135deg, #FF9500, #EA580C);
+  box-shadow: 0 4px 14px rgba(255, 149, 0, 0.45);
+}
+
+.tool-btn[data-tool="laser"].active {
+  background: linear-gradient(135deg, #EC4899, #D946EF);
+  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.45);
 }
 
 /* Tool Color Tip Indicators (Pen & Highlighter) - Placed directly at the tip of the nib */
