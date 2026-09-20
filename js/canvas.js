@@ -2796,14 +2796,15 @@ window.CanvasEngine = class CanvasEngine {
     });
 
     this.selectedTextBoxes.forEach(tb => {
-      let boxW = 120;
+      let boxW = 50;
       let boxH = Math.round((tb.fontSize || 18) * 1.4);
       if (tb._el) {
-        boxW = Math.max(50, tb._el.offsetWidth);
-        boxH = Math.max(24, tb._el.offsetHeight);
+        const rect = tb._el.getBoundingClientRect();
+        boxW = Math.max(30, Math.round(rect.width / (this.zoom || 1)));
+        boxH = Math.max(20, Math.round(rect.height / (this.zoom || 1)));
       } else {
         const charWidth = (tb.fontSize || 18) * 0.6;
-        boxW = Math.max(80, (tb.text || '').length * charWidth + 16);
+        boxW = Math.max(50, (tb.text || '').length * charWidth + 16);
       }
       minX = Math.min(minX, tb.x);
       maxX = Math.max(maxX, tb.x + boxW);
@@ -2811,7 +2812,8 @@ window.CanvasEngine = class CanvasEngine {
       maxY = Math.max(maxY, tb.y + boxH);
     });
 
-    const padding = 12;
+    const isSingleText = (this.selectedTextBoxes.length === 1 && !this.selectedStrokes.length && !this.selectedImages.length);
+    const padding = isSingleText ? 4 : 10;
     this.selectionBox = {
       x: minX - padding,
       y: minY - padding,

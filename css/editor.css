@@ -13,28 +13,38 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 12px;
   z-index: 100;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .editor-header-left, .editor-header-center, .editor-header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .document-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 #doc-title-input {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--gn-text-primary);
   border-radius: var(--radius-sm);
-  padding: 4px 8px;
-  max-width: 220px;
+  padding: 4px 6px;
+  max-width: 140px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 #doc-title-input:hover, #doc-title-input:focus {
   background: var(--gn-bg);
@@ -47,24 +57,27 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Save-to-file PDF button */
 .btn-save-pdf {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 14px;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
   background: var(--gn-green);
   color: #FFFFFF;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
   box-shadow: 0 2px 8px rgba(52, 199, 89, 0.35);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .btn-save-pdf:hover {
   background: #28A745;
@@ -88,17 +101,20 @@
   display: flex;
   align-items: center;
   background: #F2F2F7;
-  padding: 3px;
+  padding: 2px 4px;
   border-radius: var(--radius-md);
   gap: 2px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 #page-counter-text, #zoom-level-text {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  padding: 0 8px;
-  min-width: 75px;
+  padding: 0 6px;
+  min-width: 60px;
   text-align: center;
+  white-space: nowrap;
 }
 
 /* Editor Body Workspace */
@@ -771,15 +787,18 @@
 }
 
 /* Text Box & Image Box Lasso-Style Bounding Box System */
-.text-box-element,
-.image-box-element {
+.text-box-element {
   position: absolute;
   pointer-events: auto;
   border: 1.5px dashed transparent;
   background: transparent;
   padding: 4px 8px;
   border-radius: 4px;
-  min-width: 60px;
+  min-width: 30px;
+  width: max-content;
+  max-width: 90%;
+  white-space: pre-wrap;
+  word-break: break-word;
   font-family: 'Inter', sans-serif;
   font-size: 16px;
   color: #1C1C1E;
@@ -787,6 +806,7 @@
   z-index: 20;
   cursor: text;
   user-select: text;
+  box-sizing: border-box;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -810,9 +830,11 @@
   -webkit-user-select: text !important;
 }
 
-
-
 .image-box-element {
+  position: absolute;
+  pointer-events: auto;
+  border: 1.5px dashed transparent;
+  background: transparent;
   padding: 0;
   cursor: pointer;
   user-select: none;
