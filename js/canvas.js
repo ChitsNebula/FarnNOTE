@@ -70,6 +70,16 @@ window.CanvasEngine = class CanvasEngine {
     this.bindViewportScroll();
     this._currentCursorStyle = null;
     this.updateCursorColor();
+
+    // Touch Drawing Mode vs Stylus Only (Palm Rejection)
+    this.touchDrawingEnabled = localStorage.getItem('farmnotes_touch_drawing') === 'true';
+    window.addEventListener('farmnotes-input-mode-changed', (e) => {
+      this.touchDrawingEnabled = !!e.detail?.touchDrawing;
+    });
+  }
+
+  setTouchDrawing(enabled) {
+    this.touchDrawingEnabled = !!enabled;
   }
 
   updateCursorColor() {
@@ -820,9 +830,9 @@ window.CanvasEngine = class CanvasEngine {
         return;
       }
 
-      // Single finger on canvas → track for manual scrolling
+      // Single finger on canvas → track for manual scrolling (only if Touch Drawing is disabled)
       // Only start scroll tracking if pen is NOT currently drawing
-      if (e.touches.length === 1 && !this.isPinching && !this.isDrawing) {
+      if (!this.touchDrawingEnabled && e.touches.length === 1 && !this.isPinching && !this.isDrawing) {
         this._touchScrollStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }
     }, { passive: true });
@@ -857,9 +867,9 @@ window.CanvasEngine = class CanvasEngine {
         return;
       }
 
-      // Single finger → manually scroll the viewport (since touch-action:none prevents browser scroll)
+      // Single finger → manually scroll the viewport (only if Touch Drawing is disabled)
       // Guard: isDrawing=true means stylus is active — do NOT scroll while pen is drawing!
-      if (e.touches.length === 1 && this._touchScrollStart && !this.isPinching && !this.isDrawing) {
+      if (!this.touchDrawingEnabled && e.touches.length === 1 && this._touchScrollStart && !this.isPinching && !this.isDrawing) {
         const dx = this._touchScrollStart.x - e.touches[0].clientX;
         const dy = this._touchScrollStart.y - e.touches[0].clientY;
         this.viewport.scrollBy(dx, dy);
@@ -1037,7 +1047,11 @@ window.CanvasEngine = class CanvasEngine {
       }
 
       if (e.pointerType === 'touch') {
-        return;
+        if (!this.touchDrawingEnabled) {
+          return;
+        }
+        // In Touch Drawing Mode: single finger draws on canvas!
+        this._touchScrollStart = null;
       }
 
       // Pen/Stylus: always clear any stale isPinching state immediately
@@ -1276,7 +1290,7 @@ window.CanvasEngine = class CanvasEngine {
       }
 
 
-      if (e.pointerType === 'touch' || window.ToolState.currentTool === 'text') return;
+      if ((e.pointerType === 'touch' && !this.touchDrawingEnabled) || window.ToolState.currentTool === 'text') return;
       if (!this.isDrawing || this.activePageIndex !== view.index) return;
       if (e.cancelable) e.preventDefault();
 
@@ -1566,7 +1580,7 @@ window.CanvasEngine = class CanvasEngine {
       }
 
 
-      if (e.pointerType === 'touch' || window.ToolState.currentTool === 'text') return;
+      if ((e.pointerType === 'touch' && !this.touchDrawingEnabled) || window.ToolState.currentTool === 'text') return;
       if (this.isPinching) {
         this.isDrawing = false;
         this.currentPoints = [];

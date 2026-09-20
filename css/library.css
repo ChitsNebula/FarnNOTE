@@ -1691,4 +1691,141 @@
   color: #007AFF;
 }
 
+/* ==========================================================================
+   SETTINGS MODAL & INPUT MODE SELECTION
+   ========================================================================== */
+.settings-modal-card {
+  max-width: 520px;
+  width: 90%;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
+}
+
+.settings-modal-body {
+  padding: 24px;
+}
+
+.settings-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gn-text-primary);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-section-desc {
+  font-size: 13px;
+  color: var(--gn-text-secondary);
+  margin-bottom: 18px;
+  line-height: 1.45;
+}
+
+.settings-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-option-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1.5px solid var(--gn-border);
+  background: var(--gn-surface);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  user-select: none;
+}
+
+.settings-option-card input[type="radio"] {
+  display: none;
+}
+
+.settings-option-card:hover {
+  border-color: #C7C7CC;
+  background: #F9F9FB;
+  transform: translateY(-1px);
+}
+
+.settings-option-card.active {
+  border-color: var(--gn-orange);
+  background: rgba(255, 149, 0, 0.05);
+  box-shadow: 0 4px 16px rgba(255, 149, 0, 0.12);
+}
+
+.option-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #F2F2F7;
+  color: var(--gn-text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.settings-option-card.active .option-icon-box {
+  background: var(--gn-orange);
+  color: #FFFFFF;
+}
+
+.option-content {
+  flex: 1;
+}
+
+.option-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--gn-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.option-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(52, 199, 89, 0.15);
+  color: #28CD41;
+}
+
+.option-desc {
+  font-size: 12.5px;
+  color: var(--gn-text-secondary);
+  line-height: 1.4;
+}
+
+.option-check-indicator {
+  font-size: 20px;
+  color: #D1D1D6;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.settings-option-card.active .option-check-indicator {
+  color: var(--gn-orange);
+}
+
+.settings-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  background: #F9F9FB;
+  border-top: 1px solid var(--gn-border);
+}
+
+
 

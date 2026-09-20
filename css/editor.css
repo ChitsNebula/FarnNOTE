@@ -2906,4 +2906,13 @@
   box-shadow: 0 4px 15px rgba(255, 149, 0, 0.4) !important;
 }
 
+/* Quick Touch Drawing Mode Toggle in Editor */
+#btn-editor-input-mode.active-touch-mode {
+  background: rgba(255, 149, 0, 0.15) !important;
+  color: var(--gn-orange) !important;
+  border: 1.5px solid var(--gn-orange) !important;
+  box-shadow: 0 2px 8px rgba(255, 149, 0, 0.2) !important;
+}
+
+
 

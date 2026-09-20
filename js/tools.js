@@ -52,6 +52,21 @@ window.ToolState = {
   textColor: '#1C1C1E'
 };
 
+// Global Application Settings (Input Mode, Touch Drawing & Stylus Palm Rejection)
+window.AppSettings = {
+  getTouchDrawing: function() {
+    return localStorage.getItem('farmnotes_touch_drawing') === 'true';
+  },
+  setTouchDrawing: function(enabled) {
+    const val = !!enabled;
+    localStorage.setItem('farmnotes_touch_drawing', val ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('farmnotes-input-mode-changed', {
+      detail: { touchDrawing: val }
+    }));
+    return val;
+  }
+};
+
 // Spline smoothing interpolation for smooth natural handwriting with jitter elimination
 window.catmullRomSpline = function(points, maxSamplesPerSegment = 4) {
   if (!points || points.length < 3) return points || [];

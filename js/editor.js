@@ -558,6 +558,7 @@ window.EditorController = class EditorController {
 
     this.initGoogleLensDrawer();
     this.initCalculator();
+    this.initInputModeToggle();
 
     window.addEventListener('beforeunload', () => {
       const page = this.pages && this.pages[this.currentPageIndex];
@@ -2219,6 +2220,49 @@ window.EditorController = class EditorController {
 
   highlightActiveThumbnail(pageIndex) {
     // Grid handles active state automatically
+  }
+
+  initInputModeToggle() {
+    const btnMode = document.getElementById('btn-editor-input-mode');
+    const iconMode = document.getElementById('icon-editor-input-mode');
+    if (!btnMode || !iconMode) return;
+
+    const updateUI = (isTouch) => {
+      if (isTouch) {
+        iconMode.className = 'fa-solid fa-hand';
+        btnMode.classList.add('active-touch-mode');
+        btnMode.title = 'โหมดการเขียน: ใช้นิ้วมือเขียนได้ (Touch Drawing) — คลิกเพื่อสลับเป็นโหมดเฉพาะปากกา';
+      } else {
+        iconMode.className = 'fa-solid fa-pen-fancy';
+        btnMode.classList.remove('active-touch-mode');
+        btnMode.title = 'โหมดการเขียน: ปากกา / สไตลัส (Stylus Only) — คลิกเพื่อสลับเป็นโหมดใช้นิ้วมือเขียน';
+      }
+    };
+
+    // Initial state
+    const initialTouch = window.AppSettings ? window.AppSettings.getTouchDrawing() : false;
+    updateUI(initialTouch);
+
+    // Click handler
+    this.bindInstantTap(btnMode, () => {
+      const current = window.AppSettings ? window.AppSettings.getTouchDrawing() : false;
+      const next = !current;
+      if (window.AppSettings) {
+        window.AppSettings.setTouchDrawing(next);
+      }
+      updateUI(next);
+      if (window.CustomDialog && window.CustomDialog.toast) {
+        window.CustomDialog.toast(
+          next ? '🖐️ เปิดโหมดเขียนด้วยนิ้วมือ (Touch Drawing)' : '✒️ เปิดโหมดเฉพาะปากกาสไตลัส (Stylus Only & Palm Rejection)',
+          2200
+        );
+      }
+    });
+
+    // Sync when changed elsewhere (e.g. from Settings Modal)
+    window.addEventListener('farmnotes-input-mode-changed', (e) => {
+      updateUI(!!e.detail?.touchDrawing);
+    });
   }
 
   initCalculator() {

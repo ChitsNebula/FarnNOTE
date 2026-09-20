@@ -623,6 +623,66 @@ window.LibraryController = class LibraryController {
       btn.addEventListener('click', () => this.modalNewNotebook.classList.add('hidden'));
     });
 
+    // ── System Settings Modal (โหมดปากกา / ใช้นิ้วมือเขียน) ───────────────────────
+    const modalSettings = document.getElementById('modal-settings');
+    const btnLibSettings = document.getElementById('btn-library-settings');
+    const btnCloseSettings = document.getElementById('btn-close-settings');
+    const btnCancelSettings = document.getElementById('btn-cancel-settings');
+    const btnSaveSettings = document.getElementById('btn-save-settings');
+    const radioModeStylus = document.getElementById('radio-mode-stylus');
+    const radioModeTouch = document.getElementById('radio-mode-touch');
+    const cardModeStylus = document.getElementById('card-mode-stylus');
+    const cardModeTouch = document.getElementById('card-mode-touch');
+
+    const updateSettingsModalUI = (isTouch) => {
+      if (radioModeTouch) radioModeTouch.checked = isTouch;
+      if (radioModeStylus) radioModeStylus.checked = !isTouch;
+      if (cardModeTouch) cardModeTouch.classList.toggle('active', isTouch);
+      if (cardModeStylus) cardModeStylus.classList.toggle('active', !isTouch);
+    };
+
+    if (btnLibSettings && modalSettings) {
+      btnLibSettings.addEventListener('click', () => {
+        const isTouch = window.AppSettings ? window.AppSettings.getTouchDrawing() : false;
+        updateSettingsModalUI(isTouch);
+        modalSettings.classList.remove('hidden');
+      });
+    }
+
+    if (cardModeStylus) {
+      cardModeStylus.addEventListener('click', () => updateSettingsModalUI(false));
+    }
+    if (cardModeTouch) {
+      cardModeTouch.addEventListener('click', () => updateSettingsModalUI(true));
+    }
+
+    const closeSettingsModal = () => {
+      if (modalSettings) modalSettings.classList.add('hidden');
+    };
+
+    if (btnCloseSettings) btnCloseSettings.addEventListener('click', closeSettingsModal);
+    if (btnCancelSettings) btnCancelSettings.addEventListener('click', closeSettingsModal);
+    if (modalSettings) {
+      modalSettings.addEventListener('click', (e) => {
+        if (e.target === modalSettings) closeSettingsModal();
+      });
+    }
+
+    if (btnSaveSettings) {
+      btnSaveSettings.addEventListener('click', () => {
+        const isTouch = radioModeTouch ? radioModeTouch.checked : false;
+        if (window.AppSettings) {
+          window.AppSettings.setTouchDrawing(isTouch);
+        }
+        closeSettingsModal();
+        if (window.CustomDialog && window.CustomDialog.toast) {
+          window.CustomDialog.toast(
+            isTouch ? 'เปิดโหมดเขียนด้วยนิ้วมือเรียบร้อย (Touch Drawing)' : 'เปิดโหมดเฉพาะปากกาสไตลัสเรียบร้อย (Stylus Only)'
+          );
+        }
+      });
+    }
+
     this.newTitleInput.addEventListener('input', (e) => {
       this.coverPreviewTitle.innerText = e.target.value || 'สมุดโน้ตไม่มีชื่อ';
     });
