@@ -620,6 +620,12 @@ window.EditorController = class EditorController {
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.key === 'z') { e.preventDefault(); this.undo(); }
       if (e.ctrlKey && e.key === 'y') { e.preventDefault(); this.redo(); }
+      if ((e.key === 'i' || e.key === 'I') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (!document.activeElement || (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA' && !document.activeElement.isContentEditable)) {
+          e.preventDefault();
+          this.activateEyedropper();
+        }
+      }
     });
 
     bindInstantTap(document.getElementById('btn-prev-page'), async () => {
@@ -866,6 +872,13 @@ window.EditorController = class EditorController {
         this.updateToolColorIndicators();
       });
     });
+
+    const quickDropperBtn = document.getElementById('btn-quick-eyedropper');
+    if (quickDropperBtn) {
+      bindInstantTap(quickDropperBtn, () => {
+        this.activateEyedropper();
+      });
+    }
 
     const nativeColorPicker = document.getElementById('native-color-picker');
     if (nativeColorPicker) {
@@ -1584,6 +1597,14 @@ window.EditorController = class EditorController {
       });
     });
 
+    const cwDropperBtn = document.getElementById('cw-eyedropper-btn');
+    if (cwDropperBtn) {
+      this.bindInstantTap(cwDropperBtn, (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        this.activateEyedropper();
+      });
+    }
+
     // ── Toggle popover ────────────────────────────────────────────────────────
 
     this.bindInstantTap(btn, (e) => {
@@ -1764,6 +1785,92 @@ window.EditorController = class EditorController {
 
     if (this.canvasEngine && typeof this.canvasEngine.updateCursorColor === 'function') {
       this.canvasEngine.updateCursorColor();
+    }
+  }
+
+  // ─── EYEDROPPER INTEGRATION ──────────────────────────────────────────────────
+
+  async activateEyedropper() {
+    const quickBtn = document.getElementById('btn-quick-eyedropper');
+    const cwDropperBtn = document.getElementById('cw-eyedropper-btn');
+
+    // Close color wheel popover if open so it doesn't obstruct view
+    const cwPopover = document.getElementById('color-wheel-popover');
+    if (cwPopover && !cwPopover.classList.contains('hidden')) {
+      cwPopover.classList.add('hidden');
+      const cwBtn = document.getElementById('btn-custom-color');
+      if (cwBtn) cwBtn.classList.remove('active');
+    }
+
+    // Try Chromium Native EyeDropper API first if supported
+    if (window.EyeDropper) {
+      try {
+        const dropper = new window.EyeDropper();
+        const res = await dropper.open();
+        if (res && res.sRGBHex) {
+          this.applySampledColor(res.sRGBHex);
+          return;
+        }
+      } catch (err) {
+        // If canceled by user (AbortError or Escape), do nothing
+        if (err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('cancel'))) {
+          return;
+        }
+        // If unexpected error, fall through to canvas eyedropper below
+      }
+    }
+
+    // In-App Canvas Loupe Eyedropper (iOS / Safari / Firefox / Stylus / Touch)
+    if (this.canvasEngine) {
+      if (quickBtn) quickBtn.classList.add('active');
+      if (cwDropperBtn) cwDropperBtn.classList.add('active');
+
+      if (window.CustomDialog && window.CustomDialog.toast) {
+        window.CustomDialog.toast('โหมดดูดสี: แตะหรือลากบนเอกสารเพื่อเลือกสี (กด Esc เพื่อยกเลิก)', 2400);
+      }
+
+      this.canvasEngine.startEyedropper(
+        (hex) => {
+          if (quickBtn) quickBtn.classList.remove('active');
+          if (cwDropperBtn) cwDropperBtn.classList.remove('active');
+          this.applySampledColor(hex);
+        },
+        () => {
+          if (quickBtn) quickBtn.classList.remove('active');
+          if (cwDropperBtn) cwDropperBtn.classList.remove('active');
+        }
+      );
+    }
+  }
+
+  applySampledColor(hex) {
+    if (!hex) return;
+    hex = hex.toUpperCase();
+
+    const tool = window.ToolState.currentTool;
+    if (tool === 'highlighter') {
+      window.ToolState.highlighterHex = hex;
+      window.ToolState.highlighterColor = window.hexToRgba
+        ? window.hexToRgba(hex, 0.4)
+        : hex;
+    } else {
+      window.ToolState.color = hex;
+      if (tool === 'pencil') {
+        window.ToolState.pencilColor = hex;
+      }
+    }
+
+    this.updateToolColorIndicators();
+
+    // Update Color Wheel Popover elements if open or initialized
+    const cwPreview = document.getElementById('cw-preview-box');
+    const cwHexInput = document.getElementById('cw-hex-input');
+    if (cwPreview) cwPreview.style.background = hex;
+    if (cwHexInput) cwHexInput.value = hex;
+
+    // Toast feedback
+    if (window.CustomDialog && window.CustomDialog.toast) {
+      window.CustomDialog.toast(`ดูดสีสำเร็จ: ${hex}`, 2000);
     }
   }
 

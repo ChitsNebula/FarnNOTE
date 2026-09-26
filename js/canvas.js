@@ -93,6 +93,13 @@ window.CanvasEngine = class CanvasEngine {
     window.addEventListener('farmnotes-auto-tilt-changed', (e) => {
       this.autoTiltCompensation = !!e.detail?.autoTilt;
     });
+
+    // Eyedropper states
+    this.isEyedropperActive = false;
+    this._isEyedropperDown = false;
+    this._onEyedropperPicked = null;
+    this._onEyedropperCanceled = null;
+    this._eyedropperLoupeEl = null;
   }
 
   setTouchDrawing(enabled) {
@@ -100,6 +107,17 @@ window.CanvasEngine = class CanvasEngine {
   }
 
   updateCursorColor() {
+    if (this.isEyedropperActive) {
+      const dropperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M19.35 10.04L13.96 4.65c-.39-.39-1.02-.39-1.41 0l-1.84 1.83 2.12 2.12-1.41 1.41-2.12-2.12-4.24 4.24c-.39.39-.39 1.02 0 1.41l1.41 1.41-5.66 5.66c-.19.19-.3.45-.3.71V21h1.59c.26 0 .52-.11.71-.3l5.66-5.66 1.41 1.41c.39.39 1.02.39 1.41 0l7.07-7.07c.39-.39.39-1.02 0-1.41z" fill="#007AFF" stroke="#FFFFFF" stroke-width="1.5"/></svg>`;
+      const cursorStyle = `url("data:image/svg+xml;utf8,${encodeURIComponent(dropperSvg)}") 2 22, crosshair`;
+      this._currentCursorStyle = cursorStyle;
+      const views = this.pageViews || this.pages || [];
+      views.forEach(v => {
+        if (v && v.uiCanvas) v.uiCanvas.style.cursor = cursorStyle;
+      });
+      return;
+    }
+
     const tool = (window.ToolState && window.ToolState.currentTool) || 'pen';
     let cursorStyle = 'crosshair';
 
@@ -150,6 +168,230 @@ window.CanvasEngine = class CanvasEngine {
       window.ToolState.currentTool = restoredTool;
       this.updateToolUI(restoredTool);
       this.previousToolBeforeEraser = null;
+    }
+  }
+
+  // ─── EYEDROPPER & LOUPE SYSTEM ──────────────────────────────────────────────
+
+  _getOrCreateLoupe() {
+    if (!this._eyedropperLoupeEl) {
+      let el = document.getElementById('canvas-eyedropper-loupe');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'canvas-eyedropper-loupe';
+        el.className = 'canvas-eyedropper-loupe';
+        el.innerHTML = `
+          <div class="loupe-ring">
+            <canvas width="76" height="76"></canvas>
+          </div>
+          <div class="loupe-label">#FFFFFF</div>
+        `;
+        document.body.appendChild(el);
+      }
+      this._eyedropperLoupeEl = el;
+    }
+    return this._eyedropperLoupeEl;
+  }
+
+  _hideLoupe() {
+    if (this._eyedropperLoupeEl) {
+      this._eyedropperLoupeEl.style.display = 'none';
+    }
+  }
+
+  sampleColorAtPoint(view, pt) {
+    if (!view || !view.width || !view.height) {
+      return { hex: '#FFFFFF', r: 255, g: 255, b: 255 };
+    }
+
+    const dpr = view.dpr || 1;
+    const px = Math.floor(pt.x * dpr);
+    const py = Math.floor(pt.y * dpr);
+    const cW = Math.round(view.width * dpr);
+    const cH = Math.round(view.height * dpr);
+
+    if (px < 0 || px >= cW || py < 0 || py >= cH) {
+      return { hex: '#FFFFFF', r: 255, g: 255, b: 255 };
+    }
+
+    if (!this._sampleCanvas) {
+      this._sampleCanvas = document.createElement('canvas');
+      this._sampleCanvas.width = 1;
+      this._sampleCanvas.height = 1;
+      this._sampleCtx = this._sampleCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    const sCtx = this._sampleCtx;
+    sCtx.clearRect(0, 0, 1, 1);
+    sCtx.fillStyle = '#FFFFFF';
+    sCtx.fillRect(0, 0, 1, 1);
+
+    // 1. Background (PDF or Grid template)
+    if (view.bgCanvas) {
+      try {
+        sCtx.drawImage(view.bgCanvas, px, py, 1, 1, 0, 0, 1, 1);
+      } catch (e) {}
+    }
+
+    // 2. Images inserted on page
+    if (view.imageOverlays) {
+      const imgEls = view.imageOverlays.querySelectorAll('.image-item img, img');
+      imgEls.forEach(img => {
+        try {
+          const item = img.closest('.image-item') || img;
+          const left = parseFloat(item.style.left) || 0;
+          const top = parseFloat(item.style.top) || 0;
+          const w = parseFloat(item.style.width) || item.offsetWidth || 0;
+          const h = parseFloat(item.style.height) || item.offsetHeight || 0;
+          if (pt.x >= left && pt.x <= left + w && pt.y >= top && pt.y <= top + h) {
+            const ix = Math.floor(((pt.x - left) / w) * (img.naturalWidth || w));
+            const iy = Math.floor(((pt.y - top) / h) * (img.naturalHeight || h));
+            sCtx.drawImage(img, ix, iy, 1, 1, 0, 0, 1, 1);
+          }
+        } catch (e) {}
+      });
+    }
+
+    // 3. Committed Strokes
+    if (view.strokeCanvas) {
+      try {
+        sCtx.drawImage(view.strokeCanvas, px, py, 1, 1, 0, 0, 1, 1);
+      } catch (e) {}
+    }
+
+    // 4. Active drawing
+    if (view.activeCanvas) {
+      try {
+        sCtx.drawImage(view.activeCanvas, px, py, 1, 1, 0, 0, 1, 1);
+      } catch (e) {}
+    }
+
+    const p = sCtx.getImageData(0, 0, 1, 1).data;
+    const hex = '#' + [p[0], p[1], p[2]].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+    return { hex, r: p[0], g: p[1], b: p[2] };
+  }
+
+  renderLoupe(view, pt, clientX, clientY) {
+    const loupe = this._getOrCreateLoupe();
+    loupe.style.display = 'flex';
+
+    // Position loupe offset from pointer/touch point (above by default)
+    const loupeW = 90;
+    const loupeH = 114;
+    let posX = clientX - loupeW / 2;
+    let posY = clientY - loupeH - 24;
+
+    if (posY < 16) {
+      posY = clientY + 36;
+    }
+    if (posX < 16) posX = 16;
+    if (posX + loupeW > window.innerWidth - 16) posX = window.innerWidth - loupeW - 16;
+
+    loupe.style.transform = `translate3d(${posX}px, ${posY}px, 0)`;
+
+    // Sample center pixel
+    const sample = this.sampleColorAtPoint(view, pt);
+
+    // Update ring & label
+    const ring = loupe.querySelector('.loupe-ring');
+    const label = loupe.querySelector('.loupe-label');
+    if (ring) ring.style.borderColor = sample.hex;
+    if (label) label.textContent = sample.hex;
+
+    // Magnify 9x9 pixels on loupe canvas
+    const lCanvas = loupe.querySelector('canvas');
+    if (lCanvas && view) {
+      const lCtx = lCanvas.getContext('2d');
+      lCtx.imageSmoothingEnabled = false;
+      lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height);
+
+      const dpr = view.dpr || 1;
+      const px = Math.floor(pt.x * dpr);
+      const py = Math.floor(pt.y * dpr);
+      const patchSize = 9;
+      const half = Math.floor(patchSize / 2);
+
+      if (!this._patchCanvas) {
+        this._patchCanvas = document.createElement('canvas');
+        this._patchCanvas.width = patchSize;
+        this._patchCanvas.height = patchSize;
+        this._patchCtx = this._patchCanvas.getContext('2d', { willReadFrequently: true });
+      }
+      const pCtx = this._patchCtx;
+      pCtx.fillStyle = '#FFFFFF';
+      pCtx.fillRect(0, 0, patchSize, patchSize);
+
+      const srcX = px - half;
+      const srcY = py - half;
+
+      if (view.bgCanvas) {
+        try { pCtx.drawImage(view.bgCanvas, srcX, srcY, patchSize, patchSize, 0, 0, patchSize, patchSize); } catch (e) {}
+      }
+      if (view.strokeCanvas) {
+        try { pCtx.drawImage(view.strokeCanvas, srcX, srcY, patchSize, patchSize, 0, 0, patchSize, patchSize); } catch (e) {}
+      }
+      if (view.activeCanvas) {
+        try { pCtx.drawImage(view.activeCanvas, srcX, srcY, patchSize, patchSize, 0, 0, patchSize, patchSize); } catch (e) {}
+      }
+
+      // Draw magnified
+      lCtx.drawImage(this._patchCanvas, 0, 0, patchSize, patchSize, 0, 0, lCanvas.width, lCanvas.height);
+
+      // Center crosshair / pixel square
+      const cellW = lCanvas.width / patchSize;
+      const cellH = lCanvas.height / patchSize;
+      const cx = half * cellW;
+      const cy = half * cellH;
+
+      lCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      lCtx.lineWidth = 2;
+      lCtx.strokeRect(cx + 0.5, cy + 0.5, cellW - 1, cellH - 1);
+
+      lCtx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+      lCtx.lineWidth = 1;
+      lCtx.strokeRect(cx - 0.5, cy - 0.5, cellW + 1, cellH + 1);
+    }
+  }
+
+  startEyedropper(onPicked, onCanceled) {
+    this.isEyedropperActive = true;
+    this._isEyedropperDown = false;
+    this._onEyedropperPicked = onPicked || null;
+    this._onEyedropperCanceled = onCanceled || null;
+
+    // Update cursor
+    const dropperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M19.35 10.04L13.96 4.65c-.39-.39-1.02-.39-1.41 0l-1.84 1.83 2.12 2.12-1.41 1.41-2.12-2.12-4.24 4.24c-.39.39-.39 1.02 0 1.41l1.41 1.41-5.66 5.66c-.19.19-.3.45-.3.71V21h1.59c.26 0 .52-.11.71-.3l5.66-5.66 1.41 1.41c.39.39 1.02.39 1.41 0l7.07-7.07c.39-.39.39-1.02 0-1.41z" fill="#007AFF" stroke="#FFFFFF" stroke-width="1.5"/></svg>`;
+    const cursorStyle = `url("data:image/svg+xml;utf8,${encodeURIComponent(dropperSvg)}") 2 22, crosshair`;
+
+    const views = this.pageViews || this.pages || [];
+    views.forEach(v => {
+      if (v && v.uiCanvas) {
+        v.uiCanvas.style.cursor = cursorStyle;
+      }
+    });
+  }
+
+  stopEyedropper(wasPicked = false) {
+    if (!this.isEyedropperActive) return;
+    this.isEyedropperActive = false;
+    this._isEyedropperDown = false;
+    this._hideLoupe();
+    this.updateCursorColor();
+
+    if (!wasPicked && typeof this._onEyedropperCanceled === 'function') {
+      const cb = this._onEyedropperCanceled;
+      this._onEyedropperCanceled = null;
+      this._onEyedropperPicked = null;
+      cb();
+    }
+  }
+
+  completeEyedropper(hex) {
+    const cb = this._onEyedropperPicked;
+    this.stopEyedropper(true);
+    if (typeof cb === 'function') {
+      this._onEyedropperPicked = null;
+      this._onEyedropperCanceled = null;
+      cb(hex);
     }
   }
 
@@ -318,6 +560,11 @@ window.CanvasEngine = class CanvasEngine {
   bindKeyboardShortcuts() {
     window.addEventListener('keydown', (e) => {
       if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.isContentEditable)) {
+        return;
+      }
+
+      if (e.key === 'Escape' && this.isEyedropperActive) {
+        this.stopEyedropper(false);
         return;
       }
 
@@ -864,8 +1111,8 @@ window.CanvasEngine = class CanvasEngine {
       }
 
       // Single finger on canvas → track for manual scrolling (only if Touch Drawing is disabled)
-      // Only start scroll tracking if pen is NOT currently drawing
-      if (!this.touchDrawingEnabled && e.touches.length === 1 && !this.isPinching && !this.isDrawing) {
+      // Only start scroll tracking if pen is NOT currently drawing and not in eyedropper mode
+      if (!this.touchDrawingEnabled && e.touches.length === 1 && !this.isPinching && !this.isDrawing && !this.isEyedropperActive) {
         this._touchScrollStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }
     }, { passive: true });
@@ -1068,6 +1315,14 @@ window.CanvasEngine = class CanvasEngine {
         this.clearSelection();
       }
 
+      if (this.isEyedropperActive) {
+        if (e.cancelable) e.preventDefault();
+        try { target.setPointerCapture(e.pointerId); } catch (err) {}
+        this._isEyedropperDown = true;
+        this.renderLoupe(view, pt, e.clientX, e.clientY);
+        return;
+      }
+
       if (window.ToolState.currentTool === 'text') {
         this.addTextBox(view, pt.x, pt.y);
         return;
@@ -1235,6 +1490,12 @@ window.CanvasEngine = class CanvasEngine {
       if (this.isPinching) return;
 
       const pt = this.getCanvasCoords(e, view);
+
+      if (this.isEyedropperActive) {
+        if (e.cancelable) e.preventDefault();
+        this.renderLoupe(view, pt, e.clientX, e.clientY);
+        return;
+      }
 
       if (this.isAdjustingLineEndpoint && this.activeLineEndpoints && this.activeLineStroke) {
         if (e.cancelable) e.preventDefault();
@@ -1528,6 +1789,15 @@ window.CanvasEngine = class CanvasEngine {
     target.addEventListener('pointerup', (e) => {
       const pt = this.getCanvasCoords(e, view);
 
+      if (this.isEyedropperActive) {
+        if (e.cancelable) e.preventDefault();
+        try { target.releasePointerCapture(e.pointerId); } catch (err) {}
+        this._isEyedropperDown = false;
+        const sample = this.sampleColorAtPoint(view, pt);
+        this.completeEyedropper(sample.hex);
+        return;
+      }
+
       if (this.isAdjustingLineEndpoint) {
         if (e.cancelable) e.preventDefault();
         this.isAdjustingLineEndpoint = null;
@@ -1722,6 +1992,10 @@ window.CanvasEngine = class CanvasEngine {
     });
 
     target.addEventListener('pointercancel', (e) => {
+      if (this.isEyedropperActive) {
+        this._isEyedropperDown = false;
+        this.stopEyedropper(false);
+      }
       this.restorePreviousToolIfEraser();
       this.isDrawing = false;
       this._touchScrollStart = null;
@@ -1732,6 +2006,9 @@ window.CanvasEngine = class CanvasEngine {
     });
 
     target.addEventListener('pointerleave', (e) => {
+      if (this.isEyedropperActive && !this._isEyedropperDown) {
+        this._hideLoupe();
+      }
       if (!this.isDrawing) {
         this.restorePreviousToolIfEraser();
       }

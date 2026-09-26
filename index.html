@@ -18,10 +18,10 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- App Stylesheets -->
-  <link rel="stylesheet" href="css/reset.css?v=2.13.16">
-  <link rel="stylesheet" href="css/theme.css?v=2.13.16">
-  <link rel="stylesheet" href="css/library.css?v=2.13.16">
-  <link rel="stylesheet" href="css/editor.css?v=2.13.16">
+  <link rel="stylesheet" href="css/reset.css?v=2.13.17">
+  <link rel="stylesheet" href="css/theme.css?v=2.13.17">
+  <link rel="stylesheet" href="css/library.css?v=2.13.17">
+  <link rel="stylesheet" href="css/editor.css?v=2.13.17">
 
   <!-- External Libraries: Google Identity Services, PDF.js & pdf-lib -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -31,7 +31,7 @@
   <!-- Auto-Purge Cache & Service Worker on Version Bump (Fixes Chromebook 403 & stale code) -->
   <script>
     (function() {
-      const APP_VER = '2.13.16';
+      const APP_VER = '2.13.17';
       if (localStorage.getItem('farmnotes_app_version') !== APP_VER) {
         localStorage.setItem('farmnotes_app_version', APP_VER);
         if ('caches' in window) {
@@ -348,6 +348,7 @@
               <button class="color-dot" data-color="#0055D4" style="background: #0055D4;"></button>
               <button class="color-dot" data-color="#229949" style="background: #229949;"></button>
               <button class="color-wheel-trigger" id="btn-custom-color" title="เลือกสีเพิ่มเติม" style="background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);"></button>
+              <button class="color-dropper-trigger" id="btn-quick-eyedropper" title="ดูดสีจากเอกสาร (Eyedropper) [I]"><i class="fa-solid fa-eye-dropper"></i></button>
             </div>
 
             <div class="tool-divider-horizontal"></div>
@@ -372,7 +373,12 @@
         <div id="color-wheel-popover" class="color-wheel-popover hidden">
           <div class="cw-header">
             <span>เลือกสี</span>
-            <div class="cw-preview-box" id="cw-preview-box"></div>
+            <div class="cw-header-tools">
+              <button class="cw-eyedropper-btn" id="cw-eyedropper-btn" title="ดูดสีจากเอกสาร (Eyedropper)">
+                <i class="fa-solid fa-eye-dropper"></i> ดูดสี
+              </button>
+              <div class="cw-preview-box" id="cw-preview-box"></div>
+            </div>
           </div>
           <canvas id="color-wheel-canvas" width="200" height="200"></canvas>
           <div class="cw-controls">
@@ -1136,14 +1142,14 @@
 
   <!-- Standard Application Scripts (No module / Works on file:// protocol!) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/tools.js?v=2.13.16"></script>
-  <script src="js/storage.js?v=2.13.16"></script>
-  <script src="js/canvas.js?v=2.13.16"></script>
-  <script src="js/pdf.js?v=2.13.16"></script>
-  <script src="js/classroom.js?v=2.13.16"></script>
-  <script src="js/library.js?v=2.13.16"></script>
-  <script src="js/editor.js?v=2.13.16"></script>
-  <script src="js/app.js?v=2.13.16"></script>
+  <script src="js/tools.js?v=2.13.17"></script>
+  <script src="js/storage.js?v=2.13.17"></script>
+  <script src="js/canvas.js?v=2.13.17"></script>
+  <script src="js/pdf.js?v=2.13.17"></script>
+  <script src="js/classroom.js?v=2.13.17"></script>
+  <script src="js/library.js?v=2.13.17"></script>
+  <script src="js/editor.js?v=2.13.17"></script>
+  <script src="js/app.js?v=2.13.17"></script>
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
       window.addEventListener('load', () => {
