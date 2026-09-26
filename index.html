@@ -18,10 +18,10 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- App Stylesheets -->
-  <link rel="stylesheet" href="css/reset.css?v=2.13.15">
-  <link rel="stylesheet" href="css/theme.css?v=2.13.15">
-  <link rel="stylesheet" href="css/library.css?v=2.13.15">
-  <link rel="stylesheet" href="css/editor.css?v=2.13.15">
+  <link rel="stylesheet" href="css/reset.css?v=2.13.16">
+  <link rel="stylesheet" href="css/theme.css?v=2.13.16">
+  <link rel="stylesheet" href="css/library.css?v=2.13.16">
+  <link rel="stylesheet" href="css/editor.css?v=2.13.16">
 
   <!-- External Libraries: Google Identity Services, PDF.js & pdf-lib -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -31,7 +31,7 @@
   <!-- Auto-Purge Cache & Service Worker on Version Bump (Fixes Chromebook 403 & stale code) -->
   <script>
     (function() {
-      const APP_VER = '2.13.15';
+      const APP_VER = '2.13.16';
       if (localStorage.getItem('farmnotes_app_version') !== APP_VER) {
         localStorage.setItem('farmnotes_app_version', APP_VER);
         if ('caches' in window) {
@@ -697,6 +697,63 @@
               </label>
             </div>
           </div>
+
+          <!-- Section 2: Handedness & Stylus Offset Calibration (โหมดคนถนัดมือซ้าย) -->
+          <div class="settings-section" style="margin-top: 20px; border-top: 1px solid var(--gn-border); padding-top: 18px;">
+            <h4 class="settings-section-title"><i class="fa-solid fa-hand-holding-hand"></i> การจับปากกา & ชดเชยหัวปากกา (Handedness & Alignment)</h4>
+            <p class="settings-section-desc">แก้ปัญหาเส้นเยื้องไม่ตรงหัวปากกาเวลาเอียงปากกาเขียน โดยเฉพาะสำหรับคนถนัดมือซ้าย</p>
+            
+            <div class="settings-options-list">
+              <!-- Option 1: Right Handed -->
+              <label class="settings-option-card active" id="card-hand-right" for="radio-hand-right">
+                <input type="radio" name="handedness" id="radio-hand-right" value="right" checked>
+                <div class="option-icon-box">
+                  <i class="fa-solid fa-hand-fist"></i>
+                </div>
+                <div class="option-content">
+                  <div class="option-title">คนถนัดมือขวา (Right-handed)</div>
+                  <div class="option-desc">โหมดมาตรฐาน ไม่มีการเลื่อนชดเชยพิกัดหัวปากกา</div>
+                </div>
+                <div class="option-check-indicator"><i class="fa-solid fa-circle-check"></i></div>
+              </label>
+
+              <!-- Option 2: Left Handed -->
+              <label class="settings-option-card" id="card-hand-left" for="radio-hand-left">
+                <input type="radio" name="handedness" id="radio-hand-left" value="left">
+                <div class="option-icon-box">
+                  <i class="fa-solid fa-pen-nib"></i>
+                </div>
+                <div class="option-content">
+                  <div class="option-title">คนถนัดมือซ้าย (Left-handed) <span class="option-badge" style="background:rgba(255,149,0,0.15); color:var(--gn-orange);">ชดเชยเส้นเยื้องซ้าย</span></div>
+                  <div class="option-desc">ดึงเส้นกลับมาทางขวาให้ตรงกับหัวปากกาจริงเวลาเอียงมือเขียน</div>
+                </div>
+                <div class="option-check-indicator"><i class="fa-solid fa-circle-check"></i></div>
+              </label>
+            </div>
+
+            <!-- Left-Handed Fine Tuning Calibration (Visible when Left-handed selected) -->
+            <div id="left-hand-calibration-box" class="calibration-box hidden" style="margin-top: 12px; padding: 14px; background: #F8F9FA; border-radius: 12px; border: 1px dashed var(--gn-border);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                <label for="slider-stylus-offset" style="font-size: 13.5px; font-weight:600; color:var(--gn-text-primary);">
+                  <i class="fa-solid fa-arrows-left-right"></i> ระยะดึงเส้นกลับมาทางขวา (X-Offset):
+                </label>
+                <span id="label-stylus-offset-val" style="font-size: 13px; font-weight:700; color:var(--gn-orange); background:rgba(255,149,0,0.12); padding:2px 8px; border-radius:6px;">+5.0 px</span>
+              </div>
+              <input type="range" id="slider-stylus-offset" min="0" max="15" step="0.5" value="5.0" style="width: 100%; accent-color: var(--gn-orange); cursor: pointer;">
+              <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--gn-text-secondary); margin-top:4px;">
+                <span>0 px (น้อยสุด)</span>
+                <span>แนะนำ: +4 ถึง +6 px</span>
+                <span>+15 px (มากสุด)</span>
+              </div>
+
+              <div style="margin-top: 12px; display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="chk-auto-tilt" checked style="accent-color: var(--gn-orange); width:16px; height:16px; cursor:pointer;">
+                <label for="chk-auto-tilt" style="font-size: 12.5px; color:var(--gn-text-primary); cursor:pointer;">
+                  <strong>เปิดระบบ Auto Tilt:</strong> คำนวณชดเชยตามองศาเอียงปากกาอัตโนมัติ (ยิ่งเอียงมาก ยิ่งช่วยดึงเส้นกลับ)
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer settings-modal-footer">
           <button type="button" class="btn-secondary" id="btn-cancel-settings">ยกเลิก</button>
@@ -1079,14 +1136,14 @@
 
   <!-- Standard Application Scripts (No module / Works on file:// protocol!) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/tools.js?v=2.13.15"></script>
-  <script src="js/storage.js?v=2.13.15"></script>
-  <script src="js/canvas.js?v=2.13.15"></script>
-  <script src="js/pdf.js?v=2.13.15"></script>
-  <script src="js/classroom.js?v=2.13.15"></script>
-  <script src="js/library.js?v=2.13.15"></script>
-  <script src="js/editor.js?v=2.13.15"></script>
-  <script src="js/app.js?v=2.13.15"></script>
+  <script src="js/tools.js?v=2.13.16"></script>
+  <script src="js/storage.js?v=2.13.16"></script>
+  <script src="js/canvas.js?v=2.13.16"></script>
+  <script src="js/pdf.js?v=2.13.16"></script>
+  <script src="js/classroom.js?v=2.13.16"></script>
+  <script src="js/library.js?v=2.13.16"></script>
+  <script src="js/editor.js?v=2.13.16"></script>
+  <script src="js/app.js?v=2.13.16"></script>
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
       window.addEventListener('load', () => {

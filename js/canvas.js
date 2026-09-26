@@ -76,6 +76,23 @@ window.CanvasEngine = class CanvasEngine {
     window.addEventListener('farmnotes-input-mode-changed', (e) => {
       this.touchDrawingEnabled = !!e.detail?.touchDrawing;
     });
+
+    // Left-Handed Stylus Offset & Tilt Compensation
+    this.isLeftHanded = localStorage.getItem('farmnotes_handedness') === 'left';
+    this.stylusOffsetX = localStorage.getItem('farmnotes_stylus_offset_x') !== null 
+      ? parseFloat(localStorage.getItem('farmnotes_stylus_offset_x')) 
+      : 5.0;
+    this.autoTiltCompensation = localStorage.getItem('farmnotes_auto_tilt') !== 'false';
+
+    window.addEventListener('farmnotes-handedness-changed', (e) => {
+      this.isLeftHanded = e.detail?.handedness === 'left';
+    });
+    window.addEventListener('farmnotes-stylus-offset-changed', (e) => {
+      this.stylusOffsetX = parseFloat(e.detail?.offsetX) || 0;
+    });
+    window.addEventListener('farmnotes-auto-tilt-changed', (e) => {
+      this.autoTiltCompensation = !!e.detail?.autoTilt;
+    });
   }
 
   setTouchDrawing(enabled) {
@@ -795,8 +812,24 @@ window.CanvasEngine = class CanvasEngine {
     const tiltX = e.tiltX || 0;
     const tiltY = e.tiltY || 0;
     const tilt = Math.hypot(tiltX, tiltY);
+
+    // Left-Handed Stylus Offset & Tilt Compensation:
+    // When left-handed writers tilt the pen leftward (negative tiltX), digitizers and glass parallax
+    // misplace the detected center to the left of the actual physical tip.
+    // We compensate by shifting X to the right.
+    let compX = 0;
+    if (e.pointerType === 'pen' && this.isLeftHanded) {
+      compX += (this.stylusOffsetX || 0);
+
+      if (this.autoTiltCompensation && tiltX < 0) {
+        // tiltX is negative (-10 to -70 deg), add proportional offset based on tilt angle
+        const tiltIntensity = Math.min(1.8, Math.abs(tiltX) / 30);
+        compX += (tiltIntensity * 2.5);
+      }
+    }
+
     return {
-      x: (e.clientX - rect.left) / this.zoom,
+      x: (e.clientX - rect.left) / this.zoom + compX,
       y: (e.clientY - rect.top) / this.zoom,
       pressure: (e.pressure !== undefined && e.pressure > 0) ? e.pressure : 0.5,
       tilt,

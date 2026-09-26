@@ -623,7 +623,7 @@ window.LibraryController = class LibraryController {
       btn.addEventListener('click', () => this.modalNewNotebook.classList.add('hidden'));
     });
 
-    // ── System Settings Modal (โหมดปากกา / ใช้นิ้วมือเขียน) ───────────────────────
+    // ── System Settings Modal (โหมดปากกา / ใช้นิ้วมือเขียน / คนถนัดซ้าย) ────────
     const modalSettings = document.getElementById('modal-settings');
     const btnLibSettings = document.getElementById('btn-library-settings');
     const btnCloseSettings = document.getElementById('btn-close-settings');
@@ -634,6 +634,15 @@ window.LibraryController = class LibraryController {
     const cardModeStylus = document.getElementById('card-mode-stylus');
     const cardModeTouch = document.getElementById('card-mode-touch');
 
+    const radioHandRight = document.getElementById('radio-hand-right');
+    const radioHandLeft = document.getElementById('radio-hand-left');
+    const cardHandRight = document.getElementById('card-hand-right');
+    const cardHandLeft = document.getElementById('card-hand-left');
+    const calibrationBox = document.getElementById('left-hand-calibration-box');
+    const sliderOffset = document.getElementById('slider-stylus-offset');
+    const labelOffsetVal = document.getElementById('label-stylus-offset-val');
+    const chkAutoTilt = document.getElementById('chk-auto-tilt');
+
     const updateSettingsModalUI = (isTouch) => {
       if (radioModeTouch) radioModeTouch.checked = isTouch;
       if (radioModeStylus) radioModeStylus.checked = !isTouch;
@@ -641,10 +650,41 @@ window.LibraryController = class LibraryController {
       if (cardModeStylus) cardModeStylus.classList.toggle('active', !isTouch);
     };
 
+    const updateHandednessUI = (isLeft) => {
+      if (radioHandLeft) radioHandLeft.checked = isLeft;
+      if (radioHandRight) radioHandRight.checked = !isLeft;
+      if (cardHandLeft) cardHandLeft.classList.toggle('active', isLeft);
+      if (cardHandRight) cardHandRight.classList.toggle('active', !isLeft);
+      if (calibrationBox) {
+        calibrationBox.classList.toggle('hidden', !isLeft);
+      }
+    };
+
+    if (sliderOffset && labelOffsetVal) {
+      sliderOffset.addEventListener('input', () => {
+        const val = parseFloat(sliderOffset.value) || 0;
+        labelOffsetVal.innerText = `+${val.toFixed(1)} px`;
+      });
+    }
+
     if (btnLibSettings && modalSettings) {
       btnLibSettings.addEventListener('click', () => {
         const isTouch = window.AppSettings ? window.AppSettings.getTouchDrawing() : false;
         updateSettingsModalUI(isTouch);
+
+        const handedness = window.AppSettings ? window.AppSettings.getHandedness() : 'right';
+        const isLeft = handedness === 'left';
+        updateHandednessUI(isLeft);
+
+        if (sliderOffset) {
+          const curOffset = window.AppSettings ? window.AppSettings.getStylusOffsetX() : 5.0;
+          sliderOffset.value = curOffset;
+          if (labelOffsetVal) labelOffsetVal.innerText = `+${curOffset.toFixed(1)} px`;
+        }
+        if (chkAutoTilt) {
+          chkAutoTilt.checked = window.AppSettings ? window.AppSettings.getAutoTiltCompensation() : true;
+        }
+
         modalSettings.classList.remove('hidden');
       });
     }
@@ -654,6 +694,13 @@ window.LibraryController = class LibraryController {
     }
     if (cardModeTouch) {
       cardModeTouch.addEventListener('click', () => updateSettingsModalUI(true));
+    }
+
+    if (cardHandRight) {
+      cardHandRight.addEventListener('click', () => updateHandednessUI(false));
+    }
+    if (cardHandLeft) {
+      cardHandLeft.addEventListener('click', () => updateHandednessUI(true));
     }
 
     const closeSettingsModal = () => {
@@ -671,14 +718,22 @@ window.LibraryController = class LibraryController {
     if (btnSaveSettings) {
       btnSaveSettings.addEventListener('click', () => {
         const isTouch = radioModeTouch ? radioModeTouch.checked : false;
+        const isLeft = radioHandLeft ? radioHandLeft.checked : false;
+        const offsetVal = sliderOffset ? parseFloat(sliderOffset.value) : 5.0;
+        const autoTiltVal = chkAutoTilt ? chkAutoTilt.checked : true;
+
         if (window.AppSettings) {
           window.AppSettings.setTouchDrawing(isTouch);
+          window.AppSettings.setHandedness(isLeft ? 'left' : 'right');
+          window.AppSettings.setStylusOffsetX(offsetVal);
+          window.AppSettings.setAutoTiltCompensation(autoTiltVal);
         }
         closeSettingsModal();
+
         if (window.CustomDialog && window.CustomDialog.toast) {
-          window.CustomDialog.toast(
-            isTouch ? 'เปิดโหมดเขียนด้วยนิ้วมือเรียบร้อย (Touch Drawing)' : 'เปิดโหมดเฉพาะปากกาสไตลัสเรียบร้อย (Stylus Only)'
-          );
+          const handText = isLeft ? ` • โหมดคนถนัดซ้าย (ชดเชย +${offsetVal.toFixed(1)}px)` : '';
+          const modeText = isTouch ? 'โหมดเขียนด้วยนิ้วมือ' : 'โหมดเฉพาะสไตลัส';
+          window.CustomDialog.toast(`บันทึกการตั้งค่าแล้ว: ${modeText}${handText}`, 2600);
         }
       });
     }

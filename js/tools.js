@@ -52,7 +52,7 @@ window.ToolState = {
   textColor: '#1C1C1E'
 };
 
-// Global Application Settings (Input Mode, Touch Drawing & Stylus Palm Rejection)
+// Global Application Settings (Input Mode, Touch Drawing & Left-Handed Stylus Calibration)
 window.AppSettings = {
   getTouchDrawing: function() {
     return localStorage.getItem('farmnotes_touch_drawing') === 'true';
@@ -62,6 +62,40 @@ window.AppSettings = {
     localStorage.setItem('farmnotes_touch_drawing', val ? 'true' : 'false');
     window.dispatchEvent(new CustomEvent('farmnotes-input-mode-changed', {
       detail: { touchDrawing: val }
+    }));
+    return val;
+  },
+  getHandedness: function() {
+    return localStorage.getItem('farmnotes_handedness') || 'right';
+  },
+  setHandedness: function(val) {
+    const hand = val === 'left' ? 'left' : 'right';
+    localStorage.setItem('farmnotes_handedness', hand);
+    window.dispatchEvent(new CustomEvent('farmnotes-handedness-changed', {
+      detail: { handedness: hand }
+    }));
+    return hand;
+  },
+  getStylusOffsetX: function() {
+    const saved = localStorage.getItem('farmnotes_stylus_offset_x');
+    return saved !== null ? parseFloat(saved) : 5.0;
+  },
+  setStylusOffsetX: function(val) {
+    const num = Math.max(0, Math.min(20, parseFloat(val) || 0));
+    localStorage.setItem('farmnotes_stylus_offset_x', num);
+    window.dispatchEvent(new CustomEvent('farmnotes-stylus-offset-changed', {
+      detail: { offsetX: num }
+    }));
+    return num;
+  },
+  getAutoTiltCompensation: function() {
+    return localStorage.getItem('farmnotes_auto_tilt') !== 'false';
+  },
+  setAutoTiltCompensation: function(enabled) {
+    const val = !!enabled;
+    localStorage.setItem('farmnotes_auto_tilt', val ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('farmnotes-auto-tilt-changed', {
+      detail: { autoTilt: val }
     }));
     return val;
   }

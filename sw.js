@@ -1,20 +1,20 @@
 // FarmNotes Service Worker — Network-First with Offline Cache Fallback
-const CACHE_NAME = 'farmnotes-cache-v2.13.15';
+const CACHE_NAME = 'farmnotes-cache-v2.13.16';
 const STATIC_ASSETS = [
   './',
   './index.html',
-  'css/reset.css?v=2.13.15',
-  'css/theme.css?v=2.13.15',
-  'css/library.css?v=2.13.15',
-  'css/editor.css?v=2.13.15',
-  'js/tools.js?v=2.13.15',
-  'js/storage.js?v=2.13.15',
-  'js/canvas.js?v=2.13.15',
-  'js/pdf.js?v=2.13.15',
-  'js/classroom.js?v=2.13.15',
-  'js/library.js?v=2.13.15',
-  'js/editor.js?v=2.13.15',
-  'js/app.js?v=2.13.15',
+  'css/reset.css?v=2.13.16',
+  'css/theme.css?v=2.13.16',
+  'css/library.css?v=2.13.16',
+  'css/editor.css?v=2.13.16',
+  'js/tools.js?v=2.13.16',
+  'js/storage.js?v=2.13.16',
+  'js/canvas.js?v=2.13.16',
+  'js/pdf.js?v=2.13.16',
+  'js/classroom.js?v=2.13.16',
+  'js/library.js?v=2.13.16',
+  'js/editor.js?v=2.13.16',
+  'js/app.js?v=2.13.16',
   'icon-192.png',
   'icon-512.png',
   'manifest.json'
