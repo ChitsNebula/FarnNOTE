@@ -39,6 +39,8 @@ window.EditorController = class EditorController {
     this.canvasEngine = new window.CanvasEngine('canvas-pages-list', {
       onBeforePageModified: (pageIndex) => this.saveUndoState(pageIndex),
       onPageModified: (pageIndex) => this.handlePageModified(pageIndex),
+      onBeforeMultiPageModified: (pageIndices) => this.saveMultiPageUndoState(pageIndices),
+      onMultiPageModified: (pageIndices) => this.handleMultiPageModified(pageIndices),
       onActivePageChanged: (pageIndex) => this.handleActivePageChanged(pageIndex),
       onZoomChanged: (zoom) => {
         this.zoomLevelText.innerText = `${Math.round(zoom * 100)}%`;
@@ -125,6 +127,9 @@ window.EditorController = class EditorController {
   }
 
   saveUndoState(pageIndex) {
+    if (Array.isArray(pageIndex)) {
+      return this.saveMultiPageUndoState(pageIndex);
+    }
     const idx = pageIndex !== undefined ? pageIndex : this.currentPageIndex;
     const page = this.pages[idx];
     if (!page) return;
@@ -142,6 +147,23 @@ window.EditorController = class EditorController {
     this.updateUndoRedoButtons();
   }
 
+  saveMultiPageUndoState(pageIndices) {
+    if (!Array.isArray(pageIndices) || pageIndices.length === 0) return;
+    const multiPages = pageIndices.map(idx => {
+      const p = this.pages[idx];
+      return {
+        pageIndex: idx,
+        strokes: JSON.stringify(p ? (p.strokes || []) : []),
+        images: JSON.stringify(p ? (p.images || []) : []),
+        textBoxes: JSON.stringify(p ? (p.textBoxes || []) : [])
+      };
+    });
+    this.undoStack.push({ multiPages });
+    if (this.undoStack.length > 100) this.undoStack.shift();
+    this.redoStack = [];
+    this.updateUndoRedoButtons();
+  }
+
   handlePageModified(pageIndex) {
     const idx = pageIndex !== undefined ? pageIndex : this.currentPageIndex;
     if (this.pages && this.pages[idx]) {
@@ -149,6 +171,21 @@ window.EditorController = class EditorController {
     }
 
     // Silent, fast background save to local IndexedDB (keeps work saved on F5 refresh, 0% lag, 0 popups)
+    if (this._dbSaveTimer) {
+      clearTimeout(this._dbSaveTimer);
+    }
+    this._dbSaveTimer = setTimeout(async () => {
+      await this.flushPendingSaves();
+    }, 150);
+  }
+
+  handleMultiPageModified(pageIndices) {
+    if (!Array.isArray(pageIndices)) return;
+    pageIndices.forEach(idx => {
+      if (this.pages && this.pages[idx]) {
+        this._dirtyPages.add(idx);
+      }
+    });
     if (this._dbSaveTimer) {
       clearTimeout(this._dbSaveTimer);
     }
@@ -207,6 +244,46 @@ window.EditorController = class EditorController {
   undo() {
     if (this.undoStack.length === 0) return;
 
+    // Pop last state from Undo stack
+    const previousState = this.undoStack.pop();
+
+    if (previousState.multiPages) {
+      // Snapshot current state for all these pages for Redo
+      const redoSnapshot = {
+        multiPages: previousState.multiPages.map(item => {
+          const p = this.pages[item.pageIndex];
+          return {
+            pageIndex: item.pageIndex,
+            strokes: JSON.stringify(p ? (p.strokes || []) : []),
+            images: JSON.stringify(p ? (p.images || []) : []),
+            textBoxes: JSON.stringify(p ? (p.textBoxes || []) : [])
+          };
+        })
+      };
+      this.redoStack.push(redoSnapshot);
+
+      const modifiedIndices = [];
+      previousState.multiPages.forEach(item => {
+        const targetPage = this.pages[item.pageIndex];
+        if (targetPage) {
+          targetPage.strokes = JSON.parse(item.strokes);
+          targetPage.images = JSON.parse(item.images);
+          targetPage.textBoxes = JSON.parse(item.textBoxes);
+          const view = this.canvasEngine.pageViews[item.pageIndex];
+          if (view) {
+            this.canvasEngine.renderPageStrokes(view);
+            this.canvasEngine.renderPageImages(view);
+            this.canvasEngine.renderPageTextOverlays(view);
+          }
+          modifiedIndices.push(item.pageIndex);
+        }
+      });
+      this.canvasEngine.clearSelection();
+      this.updateUndoRedoButtons();
+      this.handleMultiPageModified(modifiedIndices);
+      return;
+    }
+
     const pageIndex = this.currentPageIndex;
     const page = this.pages[pageIndex];
     if (!page) return;
@@ -220,8 +297,6 @@ window.EditorController = class EditorController {
     };
     this.redoStack.push(currentState);
 
-    // Pop last state from Undo stack
-    const previousState = this.undoStack.pop();
     const targetPage = this.pages[previousState.pageIndex];
     if (!targetPage) return;
 
@@ -244,6 +319,46 @@ window.EditorController = class EditorController {
   redo() {
     if (this.redoStack.length === 0) return;
 
+    // Pop next state from Redo stack
+    const nextState = this.redoStack.pop();
+
+    if (nextState.multiPages) {
+      // Snapshot current state for Undo
+      const undoSnapshot = {
+        multiPages: nextState.multiPages.map(item => {
+          const p = this.pages[item.pageIndex];
+          return {
+            pageIndex: item.pageIndex,
+            strokes: JSON.stringify(p ? (p.strokes || []) : []),
+            images: JSON.stringify(p ? (p.images || []) : []),
+            textBoxes: JSON.stringify(p ? (p.textBoxes || []) : [])
+          };
+        })
+      };
+      this.undoStack.push(undoSnapshot);
+
+      const modifiedIndices = [];
+      nextState.multiPages.forEach(item => {
+        const targetPage = this.pages[item.pageIndex];
+        if (targetPage) {
+          targetPage.strokes = JSON.parse(item.strokes);
+          targetPage.images = JSON.parse(item.images);
+          targetPage.textBoxes = JSON.parse(item.textBoxes);
+          const view = this.canvasEngine.pageViews[item.pageIndex];
+          if (view) {
+            this.canvasEngine.renderPageStrokes(view);
+            this.canvasEngine.renderPageImages(view);
+            this.canvasEngine.renderPageTextOverlays(view);
+          }
+          modifiedIndices.push(item.pageIndex);
+        }
+      });
+      this.canvasEngine.clearSelection();
+      this.updateUndoRedoButtons();
+      this.handleMultiPageModified(modifiedIndices);
+      return;
+    }
+
     const pageIndex = this.currentPageIndex;
     const page = this.pages[pageIndex];
     if (!page) return;
@@ -257,8 +372,6 @@ window.EditorController = class EditorController {
     };
     this.undoStack.push(currentState);
 
-    // Pop next state from Redo stack
-    const nextState = this.redoStack.pop();
     const targetPage = this.pages[nextState.pageIndex];
     if (!targetPage) return;
 

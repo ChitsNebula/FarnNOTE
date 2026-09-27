@@ -64,6 +64,12 @@ window.CanvasEngine = class CanvasEngine {
 
     this.onBeforePageModified = options.onBeforePageModified || (() => {});
     this.onPageModified = options.onPageModified || (() => {});
+    this.onBeforeMultiPageModified = options.onBeforeMultiPageModified || ((indices) => {
+      if (indices && indices.length) this.onBeforePageModified(indices[0]);
+    });
+    this.onMultiPageModified = options.onMultiPageModified || ((indices) => {
+      if (indices && indices.length) this.onPageModified(indices[0]);
+    });
     this.onActivePageChanged = options.onActivePageChanged || (() => {});
     this.onZoomChanged = options.onZoomChanged || (() => {});
 
@@ -1283,14 +1289,6 @@ window.CanvasEngine = class CanvasEngine {
         }
       }
 
-      if (view.pageData && view.pageData.images && view.pageData.images.length > 0) {
-        const selectedImg = view.pageData.images.find(img => img.state === 'selected');
-        if (selectedImg) {
-          selectedImg.state = 'confirmed';
-          this.renderPageImages(view);
-          if (window.ToolState.currentTool !== 'text') return;
-        }
-      }
 
       const handleHit = this.hitTestSelectionHandles(pt);
       if (handleHit) {
@@ -1375,13 +1373,58 @@ window.CanvasEngine = class CanvasEngine {
           this.isDraggingSelection = true;
           this.dragStartPos = pt;
           this.snapshotInitSelectionState();
+          this.initSelectionDragGhost(view, e.clientX, e.clientY);
           target.setPointerCapture(e.pointerId);
           if (e.cancelable) e.preventDefault();
           return;
         }
 
-
         this.clearSelection();
+      }
+
+      if (window.ToolState.currentTool === 'lasso') {
+        // Hit-test images on this page to select/drag immediately
+        if (view.pageData && view.pageData.images && view.pageData.images.length > 0) {
+          for (let i = view.pageData.images.length - 1; i >= 0; i--) {
+            const img = view.pageData.images[i];
+            if (pt.x >= img.x && pt.x <= img.x + img.w && pt.y >= img.y && pt.y <= img.y + img.h) {
+              this.selectImageInLasso(view, img);
+              this.onBeforePageModified(view.index);
+              this.activePageIndex = view.index;
+              this.isDrawing = true;
+              this.isDraggingSelection = true;
+              this.dragStartPos = pt;
+              this.snapshotInitSelectionState();
+              this.initSelectionDragGhost(view, e.clientX, e.clientY);
+              target.setPointerCapture(e.pointerId);
+              if (e.cancelable) e.preventDefault();
+              return;
+            }
+          }
+        }
+
+        // Hit-test text boxes on this page to select/drag immediately
+        if (view.pageData && view.pageData.textBoxes && view.pageData.textBoxes.length > 0) {
+          for (let i = view.pageData.textBoxes.length - 1; i >= 0; i--) {
+            const tb = view.pageData.textBoxes[i];
+            const charW = (tb.fontSize || 18) * 0.6;
+            const tbW = Math.max(50, (tb.text || '').length * charW + 20);
+            const tbH = Math.max(24, (tb.fontSize || 18) * 1.5);
+            if (pt.x >= tb.x && pt.x <= tb.x + tbW && pt.y >= tb.y && pt.y <= tb.y + tbH) {
+              this.selectTextBoxInLasso(view, tb);
+              this.onBeforePageModified(view.index);
+              this.activePageIndex = view.index;
+              this.isDrawing = true;
+              this.isDraggingSelection = true;
+              this.dragStartPos = pt;
+              this.snapshotInitSelectionState();
+              this.initSelectionDragGhost(view, e.clientX, e.clientY);
+              target.setPointerCapture(e.pointerId);
+              if (e.cancelable) e.preventDefault();
+              return;
+            }
+          }
+        }
       }
 
       if (this.isEyedropperActive) {
@@ -1621,33 +1664,37 @@ window.CanvasEngine = class CanvasEngine {
         }
 
         if (this.isDraggingSelection && this.dragStartPos && this.selectionBox && this.initSelectionState) {
-          const dx = pt.x - this.dragStartPos.x;
-          const dy = pt.y - this.dragStartPos.y;
+          if (this._dragGhostCanvas) {
+            this.updateSelectionDragGhost(e.clientX, e.clientY);
+          } else {
+            const dx = pt.x - this.dragStartPos.x;
+            const dy = pt.y - this.dragStartPos.y;
 
-          this.selectionBox.x = this.initSelectionState.box.x + dx;
-          this.selectionBox.y = this.initSelectionState.box.y + dy;
+            this.selectionBox.x = this.initSelectionState.box.x + dx;
+            this.selectionBox.y = this.initSelectionState.box.y + dy;
 
-          this.selectedImages.forEach((img, idx) => {
-            const initImg = this.initSelectionState.images[idx];
-            img.x = initImg.x + dx;
-            img.y = initImg.y + dy;
-            if (img._el) {
-              img._el.style.left = `${img.x}px`;
-              img._el.style.top = `${img.y}px`;
-            }
-          });
+            this.selectedImages.forEach((img, idx) => {
+              const initImg = this.initSelectionState.images[idx];
+              img.x = initImg.x + dx;
+              img.y = initImg.y + dy;
+              if (img._el) {
+                img._el.style.left = `${img.x}px`;
+                img._el.style.top = `${img.y}px`;
+              }
+            });
 
-          this.selectedTextBoxes.forEach((tb, idx) => {
-            const initTb = this.initSelectionState.textBoxes[idx];
-            tb.x = initTb.x + dx;
-            tb.y = initTb.y + dy;
-            if (tb._el) {
-              tb._el.style.left = `${tb.x}px`;
-              tb._el.style.top = `${tb.y}px`;
-            }
-          });
+            this.selectedTextBoxes.forEach((tb, idx) => {
+              const initTb = this.initSelectionState.textBoxes[idx];
+              tb.x = initTb.x + dx;
+              tb.y = initTb.y + dy;
+              if (tb._el) {
+                tb._el.style.left = `${tb.x}px`;
+                tb._el.style.top = `${tb.y}px`;
+              }
+            });
 
-          this.renderSelectionDragPreview(view, dx, dy);
+            this.renderSelectionDragPreview(view, dx, dy);
+          }
           return;
         }
       }
@@ -1878,19 +1925,151 @@ window.CanvasEngine = class CanvasEngine {
       if (this.isDraggingSelection || this.isResizingSelection || this.isRotatingSelection) {
         if (e.cancelable) e.preventDefault();
 
+        const wasDragging = this.isDraggingSelection;
+        this.cleanupSelectionDragGhost();
+
         // Finalize stroke points positions on pointerup
-        if (this.initSelectionState && this.selectedStrokes) {
-          if (this.isDraggingSelection && this.dragStartPos) {
-            const dx = pt.x - this.dragStartPos.x;
-            const dy = pt.y - this.dragStartPos.y;
-            this.selectedStrokes.forEach((s, idx) => {
-              const initPts = this.initSelectionState.strokes[idx];
-              if (!initPts) return;
-              s.points.forEach((p, pIdx) => {
-                p.x = initPts[pIdx].x + dx;
-                p.y = initPts[pIdx].y + dy;
-              });
-            });
+        if (this.initSelectionState) {
+          if (wasDragging && this.dragStartPos) {
+            const dx = (this._dragStartClient ? (e.clientX - this._dragStartClient.x) : (pt.x - this.dragStartPos.x)) / (this._dragStartClient ? this.zoom : 1);
+            const dy = (this._dragStartClient ? (e.clientY - this._dragStartClient.y) : (pt.y - this.dragStartPos.y)) / (this._dragStartClient ? this.zoom : 1);
+
+            const sourceView = this._sourceView || view;
+            const boxCenterClientX = this._startBoxClient
+              ? (this._startBoxClient.x + (this._startBoxClient.w / 2) + (e.clientX - this._dragStartClient.x))
+              : e.clientX;
+            const boxCenterClientY = this._startBoxClient
+              ? (this._startBoxClient.y + (this._startBoxClient.h / 2) + (e.clientY - this._dragStartClient.y))
+              : e.clientY;
+
+            const targetView = this.findPageViewAtClientPoint(boxCenterClientX, boxCenterClientY) ||
+                               this.findPageViewAtClientPoint(e.clientX, e.clientY) ||
+                               this.findClosestPageView(boxCenterClientY) ||
+                               sourceView;
+
+            if (targetView && targetView.index !== sourceView.index) {
+              // ── Cross-Page Move! ───────────────────────────────────
+              if (!targetView.canvasReady) {
+                this._initPageCanvases(targetView);
+              }
+              if (!targetView.pageData.strokes) targetView.pageData.strokes = [];
+              if (!targetView.pageData.images) targetView.pageData.images = [];
+              if (!targetView.pageData.textBoxes) targetView.pageData.textBoxes = [];
+
+              this.onBeforeMultiPageModified([sourceView.index, targetView.index]);
+
+              const sourceRect = sourceView.container.getBoundingClientRect();
+              const targetRect = targetView.container.getBoundingClientRect();
+              const offsetToTargetX = (sourceRect.left - targetRect.left) / this.zoom;
+              const offsetToTargetY = (sourceRect.top - targetRect.top) / this.zoom;
+              const finalShiftX = dx + offsetToTargetX;
+              const finalShiftY = dy + offsetToTargetY;
+
+              // Move strokes
+              if (this.selectedStrokes && this.selectedStrokes.length) {
+                const selSet = new Set(this.selectedStrokes);
+                sourceView.pageData.strokes = (sourceView.pageData.strokes || []).filter(s => !selSet.has(s));
+                this.selectedStrokes.forEach((s, idx) => {
+                  const initPts = this.initSelectionState.strokes[idx];
+                  if (initPts) {
+                    s.points.forEach((p, pIdx) => {
+                      p.x = initPts[pIdx].x + finalShiftX;
+                      p.y = initPts[pIdx].y + finalShiftY;
+                    });
+                  }
+                  s._box = null;
+                });
+                targetView.pageData.strokes.push(...this.selectedStrokes);
+              }
+
+              // Move images
+              if (this.selectedImages && this.selectedImages.length) {
+                const selSet = new Set(this.selectedImages);
+                sourceView.pageData.images = (sourceView.pageData.images || []).filter(img => !selSet.has(img));
+                this.selectedImages.forEach((img, idx) => {
+                  const initImg = this.initSelectionState.images[idx];
+                  if (initImg) {
+                    img.x = initImg.x + finalShiftX;
+                    img.y = initImg.y + finalShiftY;
+                  }
+                });
+                targetView.pageData.images.push(...this.selectedImages);
+              }
+
+              // Move text boxes
+              if (this.selectedTextBoxes && this.selectedTextBoxes.length) {
+                const selSet = new Set(this.selectedTextBoxes);
+                sourceView.pageData.textBoxes = (sourceView.pageData.textBoxes || []).filter(tb => !selSet.has(tb));
+                this.selectedTextBoxes.forEach((tb, idx) => {
+                  const initTb = this.initSelectionState.textBoxes[idx];
+                  if (initTb) {
+                    tb.x = initTb.x + finalShiftX;
+                    tb.y = initTb.y + finalShiftY;
+                  }
+                });
+                targetView.pageData.textBoxes.push(...this.selectedTextBoxes);
+              }
+
+              // Update selection box on target view
+              this.selectionBox.x = this.initSelectionState.box.x + finalShiftX;
+              this.selectionBox.y = this.initSelectionState.box.y + finalShiftY;
+
+              this.activePageIndex = targetView.index;
+              this.onActivePageChanged(targetView.index);
+
+              // Re-render source page cleanly
+              this.clearLayer(sourceView.uiCtx, sourceView);
+              this.renderPageStrokes(sourceView);
+              this.renderPageImages(sourceView);
+              this.renderPageTextOverlays(sourceView);
+
+              // Re-render target page cleanly
+              this.renderPageStrokes(targetView);
+              this.renderPageImages(targetView);
+              this.renderPageTextOverlays(targetView);
+              this.renderSelectionBoundingBox(targetView);
+
+              this.onMultiPageModified([sourceView.index, targetView.index]);
+            } else {
+              // ── Same-Page Move ────────────────────────────────────
+              if (this.selectedStrokes) {
+                this.selectedStrokes.forEach((s, idx) => {
+                  const initPts = this.initSelectionState.strokes[idx];
+                  if (!initPts) return;
+                  s.points.forEach((p, pIdx) => {
+                    p.x = initPts[pIdx].x + dx;
+                    p.y = initPts[pIdx].y + dy;
+                  });
+                  s._box = null;
+                });
+              }
+              if (this.selectedImages) {
+                this.selectedImages.forEach((img, idx) => {
+                  const initImg = this.initSelectionState.images[idx];
+                  if (initImg) {
+                    img.x = initImg.x + dx;
+                    img.y = initImg.y + dy;
+                  }
+                });
+              }
+              if (this.selectedTextBoxes) {
+                this.selectedTextBoxes.forEach((tb, idx) => {
+                  const initTb = this.initSelectionState.textBoxes[idx];
+                  if (initTb) {
+                    tb.x = initTb.x + dx;
+                    tb.y = initTb.y + dy;
+                  }
+                });
+              }
+              this.selectionBox.x = this.initSelectionState.box.x + dx;
+              this.selectionBox.y = this.initSelectionState.box.y + dy;
+
+              this.renderPageStrokes(sourceView);
+              this.renderPageImages(sourceView);
+              this.renderPageTextOverlays(sourceView);
+              this.renderSelectionBoundingBox(sourceView);
+              this.onPageModified(sourceView.index);
+            }
           } else if (this.isResizingSelection) {
             const initBox = this.initSelectionState.box;
             const scale = this.selectionBox.w / (initBox.w || 1);
@@ -1913,6 +2092,11 @@ window.CanvasEngine = class CanvasEngine {
                 tb.y = newY + (initTb.y - initBox.y) * scale;
               }
             });
+            this.renderPageStrokes(view);
+            this.renderPageImages(view);
+            this.renderPageTextOverlays(view);
+            this.renderSelectionBoundingBox(view);
+            this.onPageModified(view.index);
           } else if (this.isRotatingSelection) {
             const centerX = this.initSelectionState.box.x + this.initSelectionState.box.w / 2;
             const centerY = this.initSelectionState.box.y + this.initSelectionState.box.h / 2;
@@ -1930,6 +2114,11 @@ window.CanvasEngine = class CanvasEngine {
                 p.y = centerY + pdx * sin + pdy * cos;
               });
             });
+            this.renderPageStrokes(view);
+            this.renderPageImages(view);
+            this.renderPageTextOverlays(view);
+            this.renderSelectionBoundingBox(view);
+            this.onPageModified(view.index);
           }
         }
 
@@ -1938,16 +2127,12 @@ window.CanvasEngine = class CanvasEngine {
         this.isRotatingSelection = false;
         this.isDrawing = false;
         this.initSelectionState = null;
+        this._dragStartClient = null;
+        this._startBoxClient = null;
+        this._sourceView = null;
         if (this.selectedStrokes) {
           this.selectedStrokes.forEach(s => { s._box = null; });
         }
-
-        // Render everything cleanly to main layers
-        this.renderPageStrokes(view);
-        this.renderPageImages(view);
-        this.renderPageTextOverlays(view);
-        this.renderSelectionBoundingBox(view);
-        this.onPageModified(view.index);
         return;
       }
 
@@ -2061,6 +2246,8 @@ window.CanvasEngine = class CanvasEngine {
     });
 
     target.addEventListener('pointercancel', (e) => {
+      this.cleanupSelectionDragGhost();
+      this.isDraggingSelection = false;
       if (this.isEyedropperActive) {
         this._isEyedropperDown = false;
         this.stopEyedropper(false);
@@ -3206,12 +3393,15 @@ window.CanvasEngine = class CanvasEngine {
   renderSelectionBoundingBox(view, skipClear = false) {
     if (!skipClear) this.clearLayer(view.uiCtx, view);
     if (!this.selectionBox) return;
+    const isSingleImg = (this.selectedImages && this.selectedImages.length === 1 && (!this.selectedStrokes || !this.selectedStrokes.length) && (!this.selectedTextBoxes || !this.selectedTextBoxes.length));
+    this.renderBoundingBoxOnCtx(view.uiCtx, this.selectionBox, this.selectionAngle || 0, isSingleImg);
+  }
 
-    const ctx = view.uiCtx;
-    const { x, y, w, h } = this.selectionBox;
+  renderBoundingBoxOnCtx(ctx, box, angle = 0, isSingleImage = false) {
+    if (!ctx || !box) return;
+    const { x, y, w, h } = box;
     const cx = x + w / 2;
     const cy = y + h / 2;
-    const angle = this.selectionAngle || 0;
 
     ctx.save();
     ctx.translate(cx, cy);
@@ -3290,7 +3480,7 @@ window.CanvasEngine = class CanvasEngine {
     ctx.stroke();
 
     // 5.5 Crop Button Handle (Orange Circle with Scissors Icon ✂️)
-    if (this.selectedImages && this.selectedImages.length === 1 && (!this.selectedStrokes || !this.selectedStrokes.length) && (!this.selectedTextBoxes || !this.selectedTextBoxes.length)) {
+    if (isSingleImage) {
       const cropX = lx + w - 60;
       const cropY = ly - 26;
       ctx.beginPath();
@@ -3330,7 +3520,6 @@ window.CanvasEngine = class CanvasEngine {
     ctx.strokeRect(copyX - 1, copyY - 5, 6, 7);
 
     // 7. Delete Button Handle (Red Circle with Trash Can Icon 🗑️)
-
     const delX = lx + w;
     const delY = ly - 26;
     ctx.beginPath();
@@ -3353,6 +3542,185 @@ window.CanvasEngine = class CanvasEngine {
     ctx.stroke();
 
     ctx.restore();
+  }
+
+  initSelectionDragGhost(view, clientX, clientY) {
+    if (!this.selectionBox) return;
+
+    this._dragStartClient = { x: clientX, y: clientY };
+    this._sourceView = view;
+
+    const sourceRect = view.container.getBoundingClientRect();
+    const startBoxClientX = sourceRect.left + (this.selectionBox.x * this.zoom);
+    const startBoxClientY = sourceRect.top + (this.selectionBox.y * this.zoom);
+    const startBoxClientW = this.selectionBox.w * this.zoom;
+    const startBoxClientH = this.selectionBox.h * this.zoom;
+
+    this._startBoxClient = {
+      x: startBoxClientX,
+      y: startBoxClientY,
+      w: startBoxClientW,
+      h: startBoxClientH
+    };
+
+    if (this._dragGhostCanvas && this._dragGhostCanvas.parentNode) {
+      this._dragGhostCanvas.parentNode.removeChild(this._dragGhostCanvas);
+    }
+
+    const padding = 50;
+    const ghostW = Math.ceil(this.selectionBox.w + padding * 2);
+    const ghostH = Math.ceil(this.selectionBox.h + padding * 2);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'lasso-drag-ghost-canvas';
+    canvas.width = Math.ceil(ghostW * this.zoom * dpr);
+    canvas.height = Math.ceil(ghostH * this.zoom * dpr);
+    canvas.style.width = `${ghostW * this.zoom}px`;
+    canvas.style.height = `${ghostH * this.zoom}px`;
+    canvas.style.position = 'fixed';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '10000';
+    canvas.style.left = '0px';
+    canvas.style.top = '0px';
+    canvas.style.willChange = 'transform';
+    canvas.style.transform = `translate3d(${startBoxClientX - padding * this.zoom}px, ${startBoxClientY - padding * this.zoom}px, 0)`;
+
+    const gCtx = canvas.getContext('2d');
+    gCtx.save();
+    gCtx.scale(this.zoom * dpr, this.zoom * dpr);
+    gCtx.translate(-this.selectionBox.x + padding, -this.selectionBox.y + padding);
+
+    // Draw strokes
+    if (this.selectedStrokes && this.selectedStrokes.length) {
+      this.selectedStrokes.forEach(s => {
+        this.drawSingleStroke(gCtx, s);
+      });
+    }
+
+    // Draw images
+    if (this.selectedImages && this.selectedImages.length) {
+      this.selectedImages.forEach(img => {
+        const el = img._el ? img._el.querySelector('img') : null;
+        if (el && el.complete && el.naturalWidth) {
+          gCtx.drawImage(el, img.x, img.y, img.w, img.h);
+        } else if (img.src) {
+          const tmpImg = new Image();
+          tmpImg.onload = () => {
+            if (this._dragGhostCanvas === canvas) {
+              gCtx.drawImage(tmpImg, img.x, img.y, img.w, img.h);
+            }
+          };
+          tmpImg.src = img.src;
+        }
+      });
+    }
+
+    // Draw text boxes
+    if (this.selectedTextBoxes && this.selectedTextBoxes.length) {
+      this.selectedTextBoxes.forEach(tb => {
+        gCtx.save();
+        gCtx.font = `${tb.fontSize || 18}px sans-serif`;
+        gCtx.fillStyle = tb.color || '#1C1C1E';
+        gCtx.textBaseline = 'top';
+        gCtx.fillText(tb.text || '', tb.x + 8, tb.y + 4);
+        gCtx.restore();
+      });
+    }
+
+    // Draw selection bounding box and handles
+    const isSingleImg = (this.selectedImages && this.selectedImages.length === 1 && (!this.selectedStrokes || !this.selectedStrokes.length) && (!this.selectedTextBoxes || !this.selectedTextBoxes.length));
+    this.renderBoundingBoxOnCtx(gCtx, this.selectionBox, this.selectionAngle || 0, isSingleImg);
+
+    gCtx.restore();
+
+    document.body.appendChild(canvas);
+    this._dragGhostCanvas = canvas;
+    this._ghostPadding = padding;
+
+    // Temporarily hide elements on source page
+    this.clearLayer(view.uiCtx, view);
+    if (this.selectedImages) {
+      this.selectedImages.forEach(img => {
+        if (img._el) img._el.style.opacity = '0';
+      });
+    }
+    if (this.selectedTextBoxes) {
+      this.selectedTextBoxes.forEach(tb => {
+        if (tb._el) tb._el.style.opacity = '0';
+      });
+    }
+  }
+
+  updateSelectionDragGhost(clientX, clientY) {
+    if (!this._dragGhostCanvas || !this._dragStartClient || !this._startBoxClient) return;
+    const deltaX = clientX - this._dragStartClient.x;
+    const deltaY = clientY - this._dragStartClient.y;
+    const currentX = (this._startBoxClient.x - this._ghostPadding * this.zoom) + deltaX;
+    const currentY = (this._startBoxClient.y - this._ghostPadding * this.zoom) + deltaY;
+    this._dragGhostCanvas.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+
+    // Auto-scroll near edges
+    if (this.viewport) {
+      const vpRect = this.viewport.getBoundingClientRect();
+      const edge = 70;
+      const speed = 14;
+      if (clientY < vpRect.top + edge) {
+        this.viewport.scrollTop -= speed;
+      } else if (clientY > vpRect.bottom - edge) {
+        this.viewport.scrollTop += speed;
+      }
+    }
+  }
+
+  cleanupSelectionDragGhost() {
+    if (this._dragGhostCanvas) {
+      if (this._dragGhostCanvas.parentNode) {
+        this._dragGhostCanvas.parentNode.removeChild(this._dragGhostCanvas);
+      }
+      this._dragGhostCanvas = null;
+    }
+    if (this.selectedImages) {
+      this.selectedImages.forEach(img => {
+        if (img._el) img._el.style.opacity = '1';
+      });
+    }
+    if (this.selectedTextBoxes) {
+      this.selectedTextBoxes.forEach(tb => {
+        if (tb._el) tb._el.style.opacity = '1';
+      });
+    }
+  }
+
+  findPageViewAtClientPoint(clientX, clientY) {
+    if (!this.pageViews || !this.pageViews.length) return null;
+    for (const v of this.pageViews) {
+      if (!v || !v.container) continue;
+      const rect = v.container.getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right &&
+          clientY >= rect.top && clientY <= rect.bottom) {
+        return v;
+      }
+    }
+    return null;
+  }
+
+  findClosestPageView(clientY) {
+    if (!this.pageViews || !this.pageViews.length) return null;
+    let closest = this.pageViews[0];
+    let minDist = Infinity;
+    for (const v of this.pageViews) {
+      if (!v || !v.container) continue;
+      const rect = v.container.getBoundingClientRect();
+      let dist = 0;
+      if (clientY < rect.top) dist = rect.top - clientY;
+      else if (clientY > rect.bottom) dist = clientY - rect.bottom;
+      if (dist < minDist) {
+        minDist = dist;
+        closest = v;
+      }
+    }
+    return closest;
   }
 
   copySelectedObjects(view) {
@@ -3984,6 +4352,25 @@ window.CanvasEngine = class CanvasEngine {
     this.selectedTextBoxes = [tb];
     this.selectedStrokes   = [];
     this.selectedImages    = [];
+    this.activePageIndex   = view.index;
+    this.computeSelectionBoundingBox();
+    this.renderSelectionBoundingBox(view);
+  }
+
+  selectImageInLasso(view, img) {
+    if (!view || !img) return;
+    img.state = 'confirmed';
+    this.renderPageImages(view);
+
+    // Auto-switch active toolbar tool to Lasso tool when image is selected!
+    if (window.selectTool) {
+      window.selectTool('lasso');
+    }
+
+    this.selectedImages    = [img];
+    this.selectedStrokes   = [];
+    this.selectedTextBoxes = [];
+    this.activePageIndex   = view.index;
     this.computeSelectionBoundingBox();
     this.renderSelectionBoundingBox(view);
   }
@@ -4195,11 +4582,12 @@ window.CanvasEngine = class CanvasEngine {
         h,
         naturalWidth: imgObj.naturalWidth,
         naturalHeight: imgObj.naturalHeight,
-        state: 'selected'
+        state: 'confirmed'
       };
 
       view.pageData.images.push(newImg);
       this.renderPageImages(view);
+      this.selectImageInLasso(view, newImg);
       this.onPageModified(view.index);
     };
     imgObj.src = dataUrl;
@@ -4218,6 +4606,7 @@ window.CanvasEngine = class CanvasEngine {
       container.style.top = `${imgObj.y}px`;
       container.style.width = `${imgObj.w}px`;
       container.style.height = `${imgObj.h}px`;
+      imgObj._el = container;
 
       const imgEl = document.createElement('img');
       imgEl.src = imgObj.src;
