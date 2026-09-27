@@ -876,6 +876,7 @@ window.CanvasEngine = class CanvasEngine {
           if (view._renderSession !== session || !view.bgCanvas) return;
 
           if (imgUrl) {
+            // ─── PHASE 1: Draw cached image instantly (zero white flash) ───
             await new Promise((resolve) => {
               const img = new Image();
               img.onload = () => {
@@ -884,13 +885,50 @@ window.CanvasEngine = class CanvasEngine {
                 }
                 resolve();
               };
-              img.onerror = () => {
-                resolve();
-              };
+              img.onerror = resolve;
               img.src = imgUrl;
             });
+
+            // ─── PHASE 2: Re-render from PDF.js vectors for true sharpness ───
+            // Runs async after Phase 1 so the page already looks OK while we upgrade.
+            // PDF.js renders at full DPR — no rasterization artifacts, no WebP blur.
+            ;(async () => {
+              try {
+                const pdfDoc = window.PDFEngine && typeof window.PDFEngine.getPDFDoc === 'function'
+                  ? await window.PDFEngine.getPDFDoc(pageData.notebookId, this.storage)
+                  : null;
+
+                if (!pdfDoc || view._renderSession !== session || !view.bgCtx) return;
+
+                const pdfPage   = await pdfDoc.getPage(view.index + 1);
+                const unscaledVp = pdfPage.getViewport({ scale: 1.0 });
+                const vecScale  = (width * dpr) / unscaledVp.width;
+                const vecVp     = pdfPage.getViewport({ scale: vecScale });
+
+                const vecCanvas = document.createElement('canvas');
+                vecCanvas.width  = Math.round(vecVp.width);
+                vecCanvas.height = Math.round(vecVp.height);
+                const vCtx = vecCanvas.getContext('2d', { alpha: false });
+                vCtx.fillStyle = '#FFFFFF';
+                vCtx.fillRect(0, 0, vecCanvas.width, vecCanvas.height);
+                await pdfPage.render({ canvasContext: vCtx, viewport: vecVp }).promise;
+
+                if (view._renderSession !== session || !view.bgCtx) return;
+
+                // Overwrite Phase 1 raster with pixel-perfect vector render
+                view.bgCtx.drawImage(vecCanvas, 0, 0, width, height);
+
+                // Refresh strokes/overlays on top of the new sharp background
+                this.renderPageStrokes(view);
+                this.renderPageTextOverlays(view);
+                this.renderPageImages(view);
+              } catch (e) {
+                // Phase 1 already visible — silent fallback, user sees no difference
+              }
+            })();
+
           } else {
-            // On-demand rendering fallback using shared PDFEngine._docCache
+            // ─── No cached image at all → pure on-demand render ───
             let renderedOnDemand = false;
             try {
               const pdfDoc = window.PDFEngine && typeof window.PDFEngine.getPDFDoc === 'function'
