@@ -149,6 +149,17 @@ window.Storage = {
 
   async deleteNotebook(id) {
     const db = await getDB();
+
+    // Phase 1: collect page asset IDs before deleting anything
+    const pages = await this.getPagesForNotebook(id);
+    const assetIds = pages
+      .filter(p => p.pdfAssetId)
+      .map(p => p.pdfAssetId);
+
+    // Always include the raw-pdf master blob regardless of page records
+    assetIds.push(`asset-${id}-raw-pdf`);
+
+    // Phase 2: delete notebook + page records in one transaction
     const tx = db.transaction(['notebooks', 'pages'], 'readwrite');
     tx.objectStore('notebooks').delete(id);
 
@@ -161,9 +172,17 @@ window.Storage = {
       pageKeys.forEach((pId) => pageStore.delete(pId));
     };
 
-    return new Promise((resolve) => {
+    await new Promise((resolve) => {
       tx.oncomplete = () => resolve(true);
     });
+
+    // Phase 3: delete all assets (PDF blobs) — fire-and-forget, non-blocking
+    // Errors are silently ignored (asset might not exist for non-PDF notebooks)
+    for (const assetId of assetIds) {
+      try { await this.deleteAsset(assetId); } catch (_) {}
+    }
+
+    return true;
   },
 
   async getPagesForNotebook(notebookId) {
