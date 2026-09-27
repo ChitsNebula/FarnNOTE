@@ -71,6 +71,16 @@ window.CanvasEngine = class CanvasEngine {
     this._currentCursorStyle = null;
     this.updateCursorColor();
 
+    // Suppress native browser context menu on canvas viewport
+    if (this.viewport) {
+      this.viewport.addEventListener('contextmenu', (e) => {
+        if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+    }
+
     // Touch Drawing Mode vs Stylus Only (Palm Rejection)
     this.touchDrawingEnabled = localStorage.getItem('farmnotes_touch_drawing') === 'true';
     window.addEventListener('farmnotes-input-mode-changed', (e) => {
@@ -1128,6 +1138,22 @@ window.CanvasEngine = class CanvasEngine {
     const target = view.uiCanvas;
     if (!target) return;
 
+    // Suppress native browser context menu (e.g. from long-press, stylus barrel button, or right-click)
+    target.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    });
+
+    if (view.container) {
+      view.container.addEventListener('contextmenu', (e) => {
+        if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+    }
+
     target.addEventListener('touchstart', (e) => {
       if (e.touches.length >= 2) {
         this.isPinching = true;
@@ -1219,6 +1245,11 @@ window.CanvasEngine = class CanvasEngine {
     });
 
     target.addEventListener('pointerdown', (e) => {
+      // Prevent browser right click / barrel button popup
+      if (e.button === 2) {
+        e.preventDefault();
+      }
+
       // Stylus Eraser Tail Detection (Chromebook USI / EMR Eraser tail end)
       const isEraserTail = (e.pointerType === 'eraser') || (e.button === 5) || ((e.buttons & 32) === 32);
       if (isEraserTail) {

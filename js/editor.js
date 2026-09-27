@@ -556,6 +556,20 @@ window.EditorController = class EditorController {
     };
     this.bindInstantTap = bindInstantTap;
 
+    // Suppress browser default right-click / stylus long-press context menu on canvas & editor
+    window.addEventListener('contextmenu', (e) => {
+      // Allow right-click menu only if user explicitly right-clicks on an editable text input or textarea
+      if (e.target.closest('input, textarea, [contenteditable="true"]')) {
+        return;
+      }
+      // If inside editor, canvas, pages, toolbar, calculator widget, etc.
+      if (e.target.closest('.editor-container, .canvas-viewport, .page-container, canvas, .calculator-widget, .editor-toolbar, .editor-header, #pages-container')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    }, { capture: true });
+
     this.initGoogleLensDrawer();
     this.initCalculator();
     this.initInputModeToggle();

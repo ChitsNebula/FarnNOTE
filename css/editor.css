@@ -732,6 +732,9 @@
   background-image: radial-gradient(#D1D1D6 1px, transparent 1px);
   background-size: 24px 24px;
   scroll-behavior: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none !important;
 }
 
 .canvas-pages-list {
@@ -745,6 +748,9 @@
   gap: 32px;
   transform-origin: center top;
   transition: none !important;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none !important;
 }
 
 
@@ -762,6 +768,7 @@
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none !important;
 }
 
 .page-container canvas {
@@ -772,6 +779,9 @@
   height: 100%;
   /* Must be none so stylus pointer events are fully cancelable and not hijacked as scroll */
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none !important;
 }
 
 .bg-canvas { z-index: 1; }
