@@ -2562,12 +2562,13 @@ window.EditorController = class EditorController {
     };
 
     // Toggle sound & haptic button UI and persistence
+    // Toggle sound & haptic button UI and persistence
     if (btnSound) {
       const updateSoundUI = () => {
         btnSound.classList.toggle('active', isFeedbackEnabled);
         btnSound.innerHTML = isFeedbackEnabled
-          ? '<i class="fa-solid fa-volume-high"></i>'
-          : '<i class="fa-solid fa-volume-xmark"></i>';
+          ? '<i class="fa-solid fa-volume-high"></i> <span>เสียงและการสั่น: เปิด</span>'
+          : '<i class="fa-solid fa-volume-xmark"></i> <span>เสียงและการสั่น: ปิด</span>';
         btnSound.title = isFeedbackEnabled ? 'ปิดเสียงและสั่น' : 'เปิดเสียงและสั่น';
       };
       updateSoundUI();
@@ -2583,6 +2584,38 @@ window.EditorController = class EditorController {
         } else {
           if (window.CustomDialog) window.CustomDialog.toast('ปิดเสียงและการสั่นเครื่องคิดเลขแล้ว');
         }
+      });
+    }
+
+    // ── Dropdown Menu (More Options: Copy, Insert, Sound) ─────────
+    const btnMore = document.getElementById('btn-calc-more');
+    const moreMenu = document.getElementById('calc-more-menu');
+    if (btnMore && moreMenu) {
+      btnMore.addEventListener('click', (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        moreMenu.classList.toggle('hidden');
+        if (typeof playFeedback === 'function') playFeedback('toggle');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.calc-menu-container')) {
+          moreMenu.classList.add('hidden');
+        }
+      });
+
+      moreMenu.querySelectorAll('.calc-dropdown-item').forEach(item => {
+        item.addEventListener('click', () => {
+          moreMenu.classList.add('hidden');
+        });
+      });
+    }
+
+    // Tap on display result to quick copy
+    if (inputEl) {
+      inputEl.style.cursor = 'pointer';
+      inputEl.title = 'แตะเพื่อคัดลอกผลลัพธ์';
+      inputEl.addEventListener('click', () => {
+        if (calcCopy) calcCopy.click();
       });
     }
 
