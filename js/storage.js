@@ -147,6 +147,22 @@ window.Storage = {
     });
   },
 
+  async moveToTrash(id) {
+    const nb = await this.getNotebook(id);
+    if (!nb) return;
+    nb.trashed = true;
+    nb.trashedAt = new Date().toISOString();
+    await this.saveNotebook(nb);
+  },
+
+  async restoreFromTrash(id) {
+    const nb = await this.getNotebook(id);
+    if (!nb) return;
+    nb.trashed = false;
+    nb.trashedAt = null;
+    await this.saveNotebook(nb);
+  },
+
   async deleteNotebook(id) {
     const db = await getDB();
 

@@ -125,14 +125,23 @@ window.LibraryController = class LibraryController {
     this.grid.innerHTML = '';
 
     let filtered = notebooks || [];
+    const isTrashView = this.currentFilter === 'trash';
 
-    if (this.currentFilter === 'favorites') {
-      filtered = filtered.filter(n => n.favorite);
-    } else if (this.currentFilter === 'recent') {
-      filtered = filtered.slice(0, 4);
-    } else if (this.currentFilter.startsWith('group-')) {
-      const groupId = this.currentFilter;
-      filtered = filtered.filter(n => n.groupId === groupId);
+    if (isTrashView) {
+      // Trash: show ONLY trashed notebooks
+      filtered = filtered.filter(n => n.trashed);
+    } else {
+      // All other views: HIDE trashed notebooks
+      filtered = filtered.filter(n => !n.trashed);
+
+      if (this.currentFilter === 'favorites') {
+        filtered = filtered.filter(n => n.favorite);
+      } else if (this.currentFilter === 'recent') {
+        filtered = filtered.slice(0, 4);
+      } else if (this.currentFilter.startsWith('group-')) {
+        const groupId = this.currentFilter;
+        filtered = filtered.filter(n => n.groupId === groupId);
+      }
     }
 
     const groups = window.Storage.getGroups();
@@ -161,6 +170,10 @@ window.LibraryController = class LibraryController {
       if (query) {
         if (emptyTitle) emptyTitle.innerText = 'ไม่พบผลการค้นหา';
         if (emptyDesc) emptyDesc.innerText = `ไม่พบสมุดโน้ตหรือเอกสารที่ตรงกับ "${rawQuery}"`;
+        if (emptyBtn) emptyBtn.classList.add('hidden');
+      } else if (isTrashView) {
+        if (emptyTitle) emptyTitle.innerText = 'ถังขยะว่างเปล่า';
+        if (emptyDesc) emptyDesc.innerText = 'ไม่มีสมุดโน้ตที่ถูกย้ายมาในถังขยะ';
         if (emptyBtn) emptyBtn.classList.add('hidden');
       } else {
         if (emptyTitle) emptyTitle.innerText = 'ยังไม่มีสมุดโน้ต';
@@ -842,14 +855,36 @@ window.LibraryController = class LibraryController {
 
   showNotebookContextPopover(notebook, targetBtn) {
     this.activeContextMenuNotebook = notebook;
+    const isTrashView = this.currentFilter === 'trash';
 
-    const favItem = document.getElementById('ctx-fav');
+    const favItem      = document.getElementById('ctx-fav');
+    const coverItem    = document.getElementById('ctx-cover');
+    const groupItem    = document.getElementById('ctx-group');
+    const renameItem   = document.getElementById('ctx-rename');
+    const dupItem      = document.getElementById('ctx-duplicate');
+    const deleteItem   = document.getElementById('ctx-delete');
+    const restoreItem  = document.getElementById('ctx-restore');
+    const permDelItem  = document.getElementById('ctx-delete-permanent');
+
+    if (isTrashView) {
+      // In trash: only show restore + permanent delete
+      [favItem, coverItem, groupItem, renameItem, dupItem, deleteItem].forEach(el => { if (el) el.style.display = 'none'; });
+      if (restoreItem)  restoreItem.style.display  = '';
+      if (permDelItem)  permDelItem.style.display   = '';
+    } else {
+      // Normal view: show all normal items, hide trash-only buttons
+      [favItem, coverItem, groupItem, renameItem, dupItem, deleteItem].forEach(el => { if (el) el.style.display = ''; });
+      if (restoreItem)  restoreItem.style.display  = 'none';
+      if (permDelItem)  permDelItem.style.display   = 'none';
+    }
+
     if (favItem) {
       favItem.querySelector('span').innerText = notebook.favorite ? 'ยกเลิกรายการโปรด' : 'สลับรายการโปรด';
     }
 
-    // Show menu first so offetHeight / offsetWidth can be accurately measured
+    // Show menu first so offsetHeight / offsetWidth can be accurately measured
     this.contextMenu.classList.remove('hidden');
+
 
     const rect = targetBtn.getBoundingClientRect();
     const menuHeight = this.contextMenu.offsetHeight || 230;
@@ -940,6 +975,22 @@ window.LibraryController = class LibraryController {
       const nb = this.activeContextMenuNotebook;
       this.hideNotebookContextPopover();
       if (nb) {
+        this.confirmMoveToTrash(nb);
+      }
+    });
+
+    document.getElementById('ctx-restore').addEventListener('click', () => {
+      const nb = this.activeContextMenuNotebook;
+      this.hideNotebookContextPopover();
+      if (nb) {
+        window.Storage.restoreFromTrash(nb.id).then(() => this.loadLibrary());
+      }
+    });
+
+    document.getElementById('ctx-delete-permanent').addEventListener('click', () => {
+      const nb = this.activeContextMenuNotebook;
+      this.hideNotebookContextPopover();
+      if (nb) {
         this.confirmDeleteNotebook(nb);
       }
     });
@@ -1003,10 +1054,21 @@ window.LibraryController = class LibraryController {
     });
   }
 
+  confirmMoveToTrash(notebook) {
+    this.showCustomDialog({
+      title: 'ย้ายไปถังขยะ',
+      message: `ย้าย "${notebook.title}" ไปถังขยะ? สามารถกู้คืนได้ภายหลัง`,
+      onConfirm: async () => {
+        await window.Storage.moveToTrash(notebook.id);
+        this.loadLibrary();
+      }
+    });
+  }
+
   confirmDeleteNotebook(notebook) {
     this.showCustomDialog({
-      title: 'ลบสมุดโน้ต',
-      message: `คุณต้องการลบสมุดโน้ต "${notebook.title}" อย่างถาวรหรือไม่?`,
+      title: 'ลบถาวร',
+      message: `ลบ "${notebook.title}" ถาวรเลยนะ? กู้คืนไม่ได้แล้ว`,
       onConfirm: async () => {
         await window.Storage.deleteNotebook(notebook.id);
         this.loadLibrary();
