@@ -163,6 +163,28 @@ window.Storage = {
     await this.saveNotebook(nb);
   },
 
+  async purgeExpiredTrash(retentionDays = 30) {
+    try {
+      const notebooks = await this.getAllNotebooks();
+      const now = Date.now();
+      const maxAgeMs = retentionDays * 24 * 60 * 60 * 1000;
+      const expired = notebooks.filter(nb => {
+        if (!nb.trashed || !nb.trashedAt) return false;
+        const trashedTime = new Date(nb.trashedAt).getTime();
+        return (now - trashedTime) >= maxAgeMs;
+      });
+
+      for (const nb of expired) {
+        console.log(`[Trash Auto-Purge] Automatically permanently deleting expired notebook: "${nb.title}" (${nb.id})`);
+        await this.deleteNotebook(nb.id);
+      }
+      return expired.length;
+    } catch (e) {
+      console.warn('[Trash Auto-Purge] Error during purge:', e);
+      return 0;
+    }
+  },
+
   async deleteNotebook(id) {
     const db = await getDB();
 

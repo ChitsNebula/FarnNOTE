@@ -11,6 +11,7 @@ window.LibraryController = class LibraryController {
     this.searchInput = document.getElementById('library-search');
     this.btnClearSearch = document.getElementById('btn-clear-search');
     this.countAllBadge = document.getElementById('count-all');
+    this.countTrashBadge = document.getElementById('count-trash');
     this.modalNewNotebook = document.getElementById('modal-new-notebook');
 
     this.newTitleInput = document.getElementById('new-notebook-title');
@@ -35,12 +36,18 @@ window.LibraryController = class LibraryController {
   }
 
   async loadLibrary() {
+    // 30-day auto-purge for trash
+    try {
+      await window.Storage.purgeExpiredTrash(30);
+    } catch (_) {}
+
     const notebooks = await window.Storage.getAllNotebooks();
     this._allNotebooks = notebooks || [];
     this.populateGroupSelects();
     this.renderSidebarGroups(this._allNotebooks);
     this.renderNotebooks(this._allNotebooks);
-    this.updateCountBadge(this._allNotebooks.length);
+    this.updateCountBadge(this._allNotebooks.filter(n => !n.trashed).length);
+    this.updateTrashBadge(this._allNotebooks.filter(n => n.trashed).length);
   }
 
   renderSidebarGroups(notebooks) {
@@ -51,7 +58,7 @@ window.LibraryController = class LibraryController {
     const groups = window.Storage.getGroups();
 
     groups.forEach(g => {
-      const count = notebooks.filter(n => n.groupId === g.id).length;
+      const count = notebooks.filter(n => !n.trashed && n.groupId === g.id).length;
       const btn = document.createElement('button');
       btn.className = `nav-item ${this.currentFilter === g.id ? 'active' : ''}`;
       btn.dataset.filter = g.id;
@@ -121,6 +128,13 @@ window.LibraryController = class LibraryController {
     if (this.countAllBadge) this.countAllBadge.innerText = count;
   }
 
+  updateTrashBadge(count) {
+    if (this.countTrashBadge) {
+      this.countTrashBadge.innerText = count;
+      this.countTrashBadge.style.display = count > 0 ? '' : 'none';
+    }
+  }
+
   renderNotebooks(notebooks) {
     this.grid.innerHTML = '';
 
@@ -173,7 +187,7 @@ window.LibraryController = class LibraryController {
         if (emptyBtn) emptyBtn.classList.add('hidden');
       } else if (isTrashView) {
         if (emptyTitle) emptyTitle.innerText = 'ถังขยะว่างเปล่า';
-        if (emptyDesc) emptyDesc.innerText = 'ไม่มีสมุดโน้ตที่ถูกย้ายมาในถังขยะ';
+        if (emptyDesc) emptyDesc.innerText = 'ไม่มีสมุดโน้ตที่ถูกย้ายมาในถังขยะ (รายการจะถูกลบถาวรหลัง 30 วัน)';
         if (emptyBtn) emptyBtn.classList.add('hidden');
       } else {
         if (emptyTitle) emptyTitle.innerText = 'ยังไม่มีสมุดโน้ต';
@@ -196,6 +210,19 @@ window.LibraryController = class LibraryController {
       const groupObj = groups.find(g => g.id === nb.groupId);
       const groupBadgeHtml = groupObj ? `<span class="group-badge-pill">📁 ${groupObj.name}</span>` : '';
 
+      // Calculate days remaining for trashed items (30 days retention)
+      let subtitleHtml = `${nb.pageCount || 1} หน้า • ${updatedDate} ${groupBadgeHtml}`;
+      if (isTrashView) {
+        let daysLeft = 30;
+        if (nb.trashedAt) {
+          const trashedDate = new Date(nb.trashedAt);
+          const msPassed = Date.now() - trashedDate.getTime();
+          const daysPassed = Math.floor(msPassed / (1000 * 60 * 60 * 24));
+          daysLeft = Math.max(0, 30 - daysPassed);
+        }
+        subtitleHtml = `<span style="color: #FF3B30; font-weight: 500;"><i class="fa-regular fa-clock"></i> เหลืออีก ${daysLeft} วันจะถูกลบถาวร</span>`;
+      }
+
       const coverStyle = nb.coverImage ? 
         `background-color: ${nb.coverColor || '#FF9500'};` : 
         `background-color: ${nb.coverColor || '#FF9500'};`;
@@ -214,7 +241,7 @@ window.LibraryController = class LibraryController {
         <div class="notebook-info">
           <div class="notebook-meta">
             <span class="title" title="${nb.title}">${nb.title}</span>
-            <span class="subtitle">${nb.pageCount || 1} หน้า • ${updatedDate} ${groupBadgeHtml}</span>
+            <span class="subtitle">${subtitleHtml}</span>
           </div>
           <div class="notebook-actions">
             <button class="btn-icon-sm btn-nb-menu" data-id="${nb.id}" title="จัดการ">
@@ -229,6 +256,12 @@ window.LibraryController = class LibraryController {
           e.stopPropagation();
           const btn = e.target.closest('.btn-nb-menu');
           this.showNotebookContextPopover(nb, btn);
+          return;
+        }
+        if (isTrashView) {
+          // In trash view, clicking anywhere on the card opens options (restore/permanent delete)
+          const btn = card.querySelector('.btn-nb-menu');
+          this.showNotebookContextPopover(nb, btn || card);
           return;
         }
         this.app.openNotebook(nb.id);
