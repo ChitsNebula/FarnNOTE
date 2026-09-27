@@ -33,21 +33,30 @@ window.bindInstantTap = function(el, callback) {
   });
 };
 
+const _savedTool = localStorage.getItem('farmnotes_last_tool');
+const _savedColor = localStorage.getItem('farmnotes_last_color');
+const _savedSize = localStorage.getItem('farmnotes_last_size');
+const _savedPenStyle = localStorage.getItem('farmnotes_last_pen_style');
+const _savedHlHex = localStorage.getItem('farmnotes_last_hl_hex');
+const _savedHlSize = localStorage.getItem('farmnotes_last_hl_size');
+const _savedEraserMode = localStorage.getItem('farmnotes_last_eraser_mode');
+const _savedShapeType = localStorage.getItem('farmnotes_last_shape_type');
+
 window.ToolState = {
-  currentTool: 'pen', // 'pen', 'highlighter', 'pencil', 'eraser', 'shape', 'fill', 'lasso', 'text', 'image', 'laser'
-  penStyle: 'fountain', // 'fountain', 'ballpoint', 'brush'
-  color: '#1C1C1E',
-  fillColor: '#1C1C1E',
-  size: 4, // stroke width
+  currentTool: (_savedTool && _savedTool !== 'image') ? _savedTool : 'pen', // 'pen', 'highlighter', 'pencil', 'eraser', 'shape', 'fill', 'lasso', 'text', 'laser'
+  penStyle: _savedPenStyle || 'fountain', // 'fountain', 'ballpoint', 'brush'
+  color: _savedColor || '#1C1C1E',
+  fillColor: _savedColor || '#1C1C1E',
+  size: _savedSize ? parseFloat(_savedSize) : 4, // stroke width
   opacity: 1.0,
-  eraserMode: 'pixel', // 'pixel', 'object'
+  eraserMode: _savedEraserMode || 'pixel', // 'pixel', 'object'
   eraserSize: 20,
-  highlighterColor: 'rgba(255, 214, 10, 0.4)',
-  highlighterHex: '#FFD60A',
-  highlighterSize: 24,
+  highlighterHex: _savedHlHex || '#FFD60A',
+  highlighterColor: window.hexToRgba ? window.hexToRgba(_savedHlHex || '#FFD60A', 0.4) : 'rgba(255, 214, 10, 0.4)',
+  highlighterSize: _savedHlSize ? parseFloat(_savedHlSize) : 24,
   pencilColor: '#3A3A3C',
   pencilSize: 3,
-  shapeType: 'auto',
+  shapeType: _savedShapeType || 'auto',
   textFontSize: 18,
   textColor: '#1C1C1E'
 };

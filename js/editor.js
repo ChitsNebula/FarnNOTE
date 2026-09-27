@@ -104,6 +104,12 @@ window.EditorController = class EditorController {
     await this.canvasEngine.loadPages(this.pages, window.Storage, targetPageIndex);
     this.renderThumbnails();
     this.highlightActiveThumbnail(targetPageIndex);
+
+    // Restore and visually highlight the remembered tool
+    const activeTool = (window.ToolState && window.ToolState.currentTool && window.ToolState.currentTool !== 'image') ? window.ToolState.currentTool : 'pen';
+    if (typeof window.selectTool === 'function') {
+      window.selectTool(activeTool);
+    }
   }
 
   handleActivePageChanged(pageIndex) {
@@ -853,6 +859,7 @@ window.EditorController = class EditorController {
         document.querySelectorAll('#main-toolbar .tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         window.ToolState.currentTool = tool;
+        try { localStorage.setItem('farmnotes_last_tool', tool); } catch (e) {}
 
         this.updateToolbarSizeDots();
         this.updateToolColorIndicators();
@@ -865,7 +872,9 @@ window.EditorController = class EditorController {
     });
 
     window.selectTool = (tool) => {
+      if (!tool || tool === 'image') return;
       window.ToolState.currentTool = tool;
+      try { localStorage.setItem('farmnotes_last_tool', tool); } catch (e) {}
       document.querySelectorAll('#main-toolbar .tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
       const btn = document.querySelector(`#main-toolbar .tool-btn[data-tool="${tool}"]`);
       if (btn) btn.classList.add('active');
@@ -880,8 +889,10 @@ window.EditorController = class EditorController {
         if (tool === 'highlighter') {
           window.ToolState.highlighterHex = hex;
           window.ToolState.highlighterColor = window.hexToRgba ? window.hexToRgba(hex, 0.4) : hex;
+          try { localStorage.setItem('farmnotes_last_hl_hex', hex); } catch (e) {}
         } else {
           window.ToolState.color = hex;
+          try { localStorage.setItem('farmnotes_last_color', hex); } catch (e) {}
         }
         this.updateToolColorIndicators();
       });
@@ -902,8 +913,10 @@ window.EditorController = class EditorController {
         if (tool === 'highlighter') {
           window.ToolState.highlighterHex = hex;
           window.ToolState.highlighterColor = window.hexToRgba ? window.hexToRgba(hex, 0.4) : hex;
+          try { localStorage.setItem('farmnotes_last_hl_hex', hex); } catch (e) {}
         } else {
           window.ToolState.color = hex;
+          try { localStorage.setItem('farmnotes_last_color', hex); } catch (e) {}
         }
         this.updateToolColorIndicators();
       });
@@ -923,6 +936,7 @@ window.EditorController = class EditorController {
         if (tool === 'highlighter') {
           const sizes = [14, 24, 38];
           window.ToolState.highlighterSize = sizes[dotIdx];
+          try { localStorage.setItem('farmnotes_last_hl_size', sizes[dotIdx]); } catch (e) {}
         } else if (tool === 'pencil') {
           const sizes = [1.5, 3, 6];
           window.ToolState.pencilSize = sizes[dotIdx];
@@ -932,11 +946,15 @@ window.EditorController = class EditorController {
         } else {
           const sizes = [2, 4, 8];
           window.ToolState.size = sizes[dotIdx];
+          try { localStorage.setItem('farmnotes_last_size', sizes[dotIdx]); } catch (e) {}
         }
       });
     });
 
     this.updateToolbarSizeDots();
+    // Activate the saved tool on initial setup
+    const initialTool = (window.ToolState.currentTool && window.ToolState.currentTool !== 'image') ? window.ToolState.currentTool : 'pen';
+    window.selectTool(initialTool);
 
     // ── Draggable Toolbar with Magnetic Snap Zones ───────────────────────────
     this.initToolbarDraggable();
@@ -1509,8 +1527,10 @@ window.EditorController = class EditorController {
         window.ToolState.highlighterColor = window.hexToRgba
           ? window.hexToRgba(hex, a * 0.4)
           : `rgba(${r},${g},${b},${a * 0.4})`;
+        try { localStorage.setItem('farmnotes_last_hl_hex', hex); } catch (e) {}
       } else {
         window.ToolState.color = hex;
+        try { localStorage.setItem('farmnotes_last_color', hex); } catch (e) {}
       }
       this.updateToolColorIndicators();
 
@@ -1867,11 +1887,13 @@ window.EditorController = class EditorController {
       window.ToolState.highlighterColor = window.hexToRgba
         ? window.hexToRgba(hex, 0.4)
         : hex;
+      try { localStorage.setItem('farmnotes_last_hl_hex', hex); } catch (e) {}
     } else {
       window.ToolState.color = hex;
       if (tool === 'pencil') {
         window.ToolState.pencilColor = hex;
       }
+      try { localStorage.setItem('farmnotes_last_color', hex); } catch (e) {}
     }
 
     this.updateToolColorIndicators();
@@ -1931,6 +1953,7 @@ window.EditorController = class EditorController {
           this.toolPopover.querySelectorAll('.option-chip').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
           window.ToolState.penStyle = chip.dataset.style;
+          try { localStorage.setItem('farmnotes_last_pen_style', chip.dataset.style); } catch (e) {}
           this.resetToolPopoverAutoFade();
         });
       });
@@ -1952,6 +1975,7 @@ window.EditorController = class EditorController {
           this.toolPopover.querySelectorAll('.option-chip').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
           window.ToolState.eraserMode = chip.dataset.mode;
+          try { localStorage.setItem('farmnotes_last_eraser_mode', chip.dataset.mode); } catch (e) {}
           this.resetToolPopoverAutoFade();
         });
       });
@@ -1976,6 +2000,7 @@ window.EditorController = class EditorController {
           this.toolPopover.querySelectorAll('.option-chip').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
           window.ToolState.shapeType = chip.dataset.shape;
+          try { localStorage.setItem('farmnotes_last_shape_type', chip.dataset.shape); } catch (e) {}
           this.resetToolPopoverAutoFade();
         });
       });
