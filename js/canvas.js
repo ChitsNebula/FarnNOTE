@@ -902,8 +902,8 @@ window.CanvasEngine = class CanvasEngine {
               if (pdfDoc) {
                 const pdfPage = await pdfDoc.getPage(view.index + 1);
                 const unscaledVp = pdfPage.getViewport({ scale: 1.0 });
-                // Dynamic scale tailored to page size (prevents 2.2x overscaling on large slides)
-                const fitScale = Math.min(1.8, Math.max(1.2, (width * dpr) / unscaledVp.width));
+                // Full DPR-scale: no artificial cap — matches the import resolution exactly
+                const fitScale = (width * dpr) / unscaledVp.width;
                 const renderVp = pdfPage.getViewport({ scale: fitScale });
                 const rW = Math.round(renderVp.width);
                 const rH = Math.round(renderVp.height);
@@ -920,7 +920,7 @@ window.CanvasEngine = class CanvasEngine {
                   view.bgCtx.drawImage(renderCanvas, 0, 0, width, height);
                 }
 
-                let newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/webp', 0.92));
+                let newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/webp', 0.98));
                 if (!newBlob) {
                   newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/png'));
                 }

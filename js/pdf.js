@@ -90,10 +90,11 @@ window.PDFEngine = {
     const firstW = Math.round(firstLayoutVp.width);
     const firstH = Math.round(firstLayoutVp.height);
 
-    // High-resolution Retina viewport: cap render canvas max dimension at 2200px
-    // This guarantees razor-sharp text while staying strictly inside safe GPU VRAM limits
-    const maxUnscaledDim = Math.max(unscaledVp.width, unscaledVp.height);
-    const renderScale = Math.min(baseScale * 2.0, 2200 / maxUnscaledDim);
+    // High-resolution Retina viewport: use device pixel ratio (min 2) — no arbitrary pixel cap.
+    // WebP 0.98 = visually lossless (eliminates DCT ringing artifacts around fine text/lines)
+    // while still being 40-60% smaller than PNG, safe for IndexedDB storage.
+    const dpr = Math.max(window.devicePixelRatio || 2, 2);
+    const renderScale = baseScale * dpr;
     const firstRenderVp = firstPage.getViewport({ scale: renderScale });
     canvas.width  = Math.round(firstRenderVp.width);
     canvas.height = Math.round(firstRenderVp.height);
@@ -101,7 +102,7 @@ window.PDFEngine = {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     await firstPage.render({ canvasContext: ctx, viewport: firstRenderVp }).promise;
 
-    let firstBlob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.92));
+    let firstBlob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.98));
     if (!firstBlob) {
       firstBlob = await new Promise(r => canvas.toBlob(r, 'image/png'));
     }
@@ -164,7 +165,9 @@ window.PDFEngine = {
             const pH       = Math.round(layoutVp.height);
 
             const pMaxDim = Math.max(pUnscaled.width, pUnscaled.height);
-            const pRenderScale = Math.min(pBaseScale * 2.0, 2200 / pMaxDim);
+            // DPR-aware scale (min 2) — no arbitrary pixel cap, same logic as page 1
+            const pDpr = Math.max(window.devicePixelRatio || 2, 2);
+            const pRenderScale = pBaseScale * pDpr;
             const renderVp = page.getViewport({ scale: pRenderScale });
             canvas.width  = Math.round(renderVp.width);
             canvas.height = Math.round(renderVp.height);
@@ -173,7 +176,7 @@ window.PDFEngine = {
 
             await page.render({ canvasContext: ctx, viewport: renderVp }).promise;
 
-            let blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.92));
+            let blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.98));
             if (!blob) {
               blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
             }
@@ -405,8 +408,106 @@ window.PDFEngine = {
 
   async _generatePDFBytes(notebook, pages, canvasEngine, onProgress = null) {
     const { PDFDocument } = window.PDFLib;
-    const pdfDoc          = await PDFDocument.create();
+    const storage = window.Storage;
 
+    // ── OVERLAY MODE: for PDF-origin notebooks, load the original vector PDF
+    //    and overlay only annotations (strokes/text/images) as transparent PNG.
+    //    This preserves vector text in the exported PDF — no rasterization. ──
+    if (notebook.template === 'pdf' && storage) {
+      let originalPdfDoc = null;
+      try {
+        const rawBlob = await storage.getAsset(`asset-${notebook.id}-raw-pdf`);
+        if (rawBlob) {
+          const rawBytes = await rawBlob.arrayBuffer();
+          originalPdfDoc = await PDFDocument.load(rawBytes, { ignoreEncryption: true });
+        }
+      } catch (e) {
+        console.warn('[PDF Export] Could not load raw PDF for overlay mode, falling back:', e);
+      }
+
+      if (originalPdfDoc) {
+        const total = pages.length;
+        for (let i = 0; i < total; i++) {
+          if (typeof onProgress === 'function') {
+            onProgress(i + 1, total, 'กำลังวาดลายมือทับต้นฉบับ');
+          }
+
+          const pageData = pages[i];
+          const w = pageData.width  || 794;
+          const h = pageData.height || 1123;
+
+          // Build annotation-only canvas (transparent background)
+          const hasAnnotations =
+            (pageData.strokes    && pageData.strokes.length)    ||
+            (pageData.textBoxes  && pageData.textBoxes.length)  ||
+            (pageData.images     && pageData.images.length);
+
+          let pdfPage;
+          if (i < originalPdfDoc.getPageCount()) {
+            pdfPage = originalPdfDoc.getPage(i);
+          } else {
+            pdfPage = originalPdfDoc.addPage([w, h]);
+          }
+
+          if (hasAnnotations) {
+            const annotCanvas = document.createElement('canvas');
+            annotCanvas.width  = w;
+            annotCanvas.height = h;
+            const ctx = annotCanvas.getContext('2d');
+
+            // 1) Image overlays
+            if (pageData.images && pageData.images.length) {
+              for (const img of pageData.images) {
+                if (!img.src) continue;
+                await new Promise((resolve) => {
+                  const el = new Image();
+                  el.onload  = () => { ctx.drawImage(el, img.x, img.y, img.w || 200, img.h || 150); resolve(); };
+                  el.onerror = resolve;
+                  el.src = img.src;
+                });
+              }
+            }
+
+            // 2) Strokes
+            if (pageData.strokes && pageData.strokes.length && canvasEngine) {
+              for (const s of pageData.strokes) {
+                if (s.tool === 'fill' && s.dataUrl && (!s._img || !s._img.complete)) {
+                  await new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => { s._img = img; resolve(); };
+                    img.onerror = resolve;
+                    img.src = s.dataUrl;
+                  });
+                }
+              }
+              pageData.strokes.forEach(s => canvasEngine.drawSingleStroke(ctx, s));
+            }
+
+            // 3) Text boxes
+            if (pageData.textBoxes && pageData.textBoxes.length) {
+              pageData.textBoxes.forEach(tb => {
+                ctx.font      = `${tb.fontSize || 18}px -apple-system, BlinkMacSystemFont, Roboto, sans-serif`;
+                ctx.fillStyle = tb.color || '#1C1C1E';
+                ctx.fillText(tb.text, tb.x, tb.y + (tb.fontSize || 18));
+              });
+            }
+
+            // Embed annotation PNG into PDF page (scaled to full PDF page size in points)
+            const pngDataUrl = annotCanvas.toDataURL('image/png');
+            const pngImage   = await originalPdfDoc.embedPng(pngDataUrl);
+            const { width: pdfW, height: pdfH } = pdfPage.getSize();
+            pdfPage.drawImage(pngImage, { x: 0, y: 0, width: pdfW, height: pdfH });
+          }
+
+          await new Promise(r => setTimeout(r, 0));
+        }
+
+        return await originalPdfDoc.save();
+      }
+    }
+
+    // ── FALLBACK: non-PDF notebooks → classic full-raster approach ──
+    const pdfDoc  = await PDFDocument.create();
     const canvases = await this._buildPageCanvases(pages, canvasEngine, onProgress);
     const total    = canvases.length;
 
