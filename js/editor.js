@@ -2430,8 +2430,148 @@ window.EditorController = class EditorController {
           calcWidget.style.top = '75px';
           calcWidget.style.right = '25px';
         }
+        if (typeof playFeedback === 'function') playFeedback('toggle');
       });
     }
+
+    // ── Audio & Haptic Feedback Engine for Calculator ─────────────
+    const btnSound = document.getElementById('btn-calc-sound');
+    let isFeedbackEnabled = localStorage.getItem('farmnotes_calc_feedback') !== 'false'; // default on
+
+    let audioCtx = null;
+    const getAudioCtx = () => {
+      if (!audioCtx) {
+        const AudioClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioClass) audioCtx = new AudioClass();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    };
+
+    const playFeedback = (type = 'num') => {
+      if (!isFeedbackEnabled) return;
+
+      // 1. Haptic Vibration (iOS / Android / mobile browsers)
+      if (navigator.vibrate) {
+        try {
+          if (type === 'equals') {
+            navigator.vibrate([15, 30, 25]);
+          } else if (type === 'clear') {
+            navigator.vibrate(25);
+          } else if (type === 'operator') {
+            navigator.vibrate(18);
+          } else if (type === 'error') {
+            navigator.vibrate([40, 30, 40]);
+          } else {
+            navigator.vibrate(12); // subtle, realistic micro-tick
+          }
+        } catch (_) {}
+      }
+
+      // 2. High-Fidelity Web Audio Synthesizer (Zero-latency realistic mechanical click)
+      try {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'equals') {
+          // Melodic double-tone chime when solution is calculated
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now); // C5
+          osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.05); // G5
+          gain.gain.setValueAtTime(0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+          osc.start(now);
+          osc.stop(now + 0.12);
+        } else if (type === 'clear') {
+          // Soft downward sweep click for clear/backspace
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(450, now);
+          osc.frequency.exponentialRampToValueAtTime(140, now + 0.04);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+          osc.start(now);
+          osc.stop(now + 0.05);
+        } else if (type === 'operator') {
+          // Crisp snappy metallic click for operators
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1200, now);
+          osc.frequency.exponentialRampToValueAtTime(280, now + 0.022);
+          gain.gain.setValueAtTime(0.13, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.025);
+          osc.start(now);
+          osc.stop(now + 0.025);
+        } else if (type === 'func') {
+          // Techy medium blip
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1050, now);
+          osc.frequency.exponentialRampToValueAtTime(350, now + 0.02);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
+          osc.start(now);
+          osc.stop(now + 0.022);
+        } else if (type === 'toggle') {
+          // Soft toggle click
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, now);
+          osc.frequency.exponentialRampToValueAtTime(300, now + 0.015);
+          gain.gain.setValueAtTime(0.11, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
+          osc.start(now);
+          osc.stop(now + 0.018);
+        } else if (type === 'error') {
+          // Low buzzing error tone
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(160, now);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+          osc.start(now);
+          osc.stop(now + 0.1);
+        } else {
+          // Standard number key: crisp, pleasant tactile tap
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, now);
+          osc.frequency.exponentialRampToValueAtTime(180, now + 0.016);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
+          osc.start(now);
+          osc.stop(now + 0.018);
+        }
+      } catch (_) {}
+    };
+
+    // Toggle sound & haptic button UI and persistence
+    if (btnSound) {
+      const updateSoundUI = () => {
+        btnSound.classList.toggle('active', isFeedbackEnabled);
+        btnSound.innerHTML = isFeedbackEnabled
+          ? '<i class="fa-solid fa-volume-high"></i>'
+          : '<i class="fa-solid fa-volume-xmark"></i>';
+        btnSound.title = isFeedbackEnabled ? 'ปิดเสียงและสั่น' : 'เปิดเสียงและสั่น';
+      };
+      updateSoundUI();
+
+      btnSound.addEventListener('click', (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        isFeedbackEnabled = !isFeedbackEnabled;
+        localStorage.setItem('farmnotes_calc_feedback', isFeedbackEnabled ? 'true' : 'false');
+        updateSoundUI();
+        if (isFeedbackEnabled) {
+          playFeedback('equals');
+          if (window.CustomDialog) window.CustomDialog.toast('เปิดเสียงและการสั่นเครื่องคิดเลขแล้ว');
+        } else {
+          if (window.CustomDialog) window.CustomDialog.toast('ปิดเสียงและการสั่นเครื่องคิดเลขแล้ว');
+        }
+      });
+    }
+
 
     // ── Tab Switching & Unit Converter Logic ─────────────────────
     const tabCalc = document.getElementById('tab-calc');
@@ -2592,6 +2732,7 @@ window.EditorController = class EditorController {
     const switchCalcTab = (activeTab) => {
       [tabCalc, tabConverter, tabEquation].forEach(t => t && t.classList.remove('active'));
       if (activeTab) activeTab.classList.add('active');
+      if (typeof playFeedback === 'function') playFeedback('toggle');
 
       if (activeTab === tabCalc) {
         if (calcBodyWrapper) calcBodyWrapper.classList.remove('hidden');
@@ -2995,6 +3136,7 @@ window.EditorController = class EditorController {
         btnEqTypeSys.classList.remove('active');
         if (eqSectionSingle) eqSectionSingle.classList.remove('hidden');
         if (eqSectionSys) eqSectionSys.classList.add('hidden');
+        if (typeof playFeedback === 'function') playFeedback('toggle');
       });
 
       btnEqTypeSys.addEventListener('click', () => {
@@ -3002,11 +3144,13 @@ window.EditorController = class EditorController {
         btnEqTypeSingle.classList.remove('active');
         if (eqSectionSys) eqSectionSys.classList.remove('hidden');
         if (eqSectionSingle) eqSectionSingle.classList.add('hidden');
+        if (typeof playFeedback === 'function') playFeedback('toggle');
       });
     }
 
     if (btnEqClearSingle && eqInputSingle) {
       btnEqClearSingle.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('clear');
         eqInputSingle.value = '';
         eqInputSingle.focus();
       });
@@ -3014,6 +3158,7 @@ window.EditorController = class EditorController {
 
     if (btnEqSolve) {
       btnEqSolve.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('equals');
         const isSys = btnEqTypeSys && btnEqTypeSys.classList.contains('active');
         if (isSys) {
           const eq1 = eqInputSys1 ? eqInputSys1.value : '';
@@ -3032,6 +3177,7 @@ window.EditorController = class EditorController {
     const eqPresetChips = document.querySelectorAll('.eq-chip');
     eqPresetChips.forEach(chip => {
       chip.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('func');
         const eqStr = chip.getAttribute('data-eq');
         if (eqInputSingle) {
           eqInputSingle.value = eqStr;
@@ -3056,6 +3202,7 @@ window.EditorController = class EditorController {
     // Copy Solution
     if (btnEqCopy) {
       btnEqCopy.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('func');
         const text = currentEqSolutionText || (eqHighlightAnswer ? eqHighlightAnswer.innerText : '');
         navigator.clipboard.writeText(text);
         window.showToast ? window.showToast('คัดลอกวิธีทำแล้ว') : null;
@@ -3065,6 +3212,7 @@ window.EditorController = class EditorController {
     // Insert Solution to Notes
     if (btnEqInsert) {
       btnEqInsert.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('equals');
         const text = currentEqSolutionText || (eqHighlightAnswer ? eqHighlightAnswer.innerText : '');
         const activeView = window.editorApp && window.editorApp.canvasEngine && window.editorApp.canvasEngine.pageViews[window.editorApp.canvasEngine.activePageIndex];
         if (activeView) {
@@ -3076,6 +3224,7 @@ window.EditorController = class EditorController {
 
     if (categorySelect) {
       categorySelect.addEventListener('change', () => {
+        if (typeof playFeedback === 'function') playFeedback('toggle');
         populateUnitDropdowns();
         runUnitConversion();
       });
@@ -3084,6 +3233,7 @@ window.EditorController = class EditorController {
     const catChips = document.querySelectorAll('.unit-cat-chip');
     catChips.forEach(chip => {
       chip.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('toggle');
         catChips.forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
         const catKey = chip.getAttribute('data-cat');
@@ -3095,12 +3245,19 @@ window.EditorController = class EditorController {
       });
     });
 
-    if (fromSelect) fromSelect.addEventListener('change', runUnitConversion);
-    if (toSelect) toSelect.addEventListener('change', runUnitConversion);
+    if (fromSelect) fromSelect.addEventListener('change', () => {
+      if (typeof playFeedback === 'function') playFeedback('toggle');
+      runUnitConversion();
+    });
+    if (toSelect) toSelect.addEventListener('change', () => {
+      if (typeof playFeedback === 'function') playFeedback('toggle');
+      runUnitConversion();
+    });
     if (fromValInput) fromValInput.addEventListener('input', runUnitConversion);
 
     if (btnUnitSwap) {
       btnUnitSwap.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('operator');
         const tmp = fromSelect.value;
         fromSelect.value = toSelect.value;
         toSelect.value = tmp;
@@ -3110,6 +3267,7 @@ window.EditorController = class EditorController {
 
     if (btnUnitCopy) {
       btnUnitCopy.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('func');
         navigator.clipboard.writeText(toValInput.value);
         window.showToast ? window.showToast('คัดลอกผลลัพธ์แล้ว') : null;
       });
@@ -3117,6 +3275,7 @@ window.EditorController = class EditorController {
 
     if (btnUnitInsert) {
       btnUnitInsert.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('equals');
         const fromText = fromSelect.options[fromSelect.selectedIndex].text.split(' ')[0];
         const toText = toSelect.options[toSelect.selectedIndex].text.split(' ')[0];
         const resultStr = `${fromValInput.value} ${fromText} = ${toValInput.value} ${toText}`;
@@ -3213,6 +3372,7 @@ window.EditorController = class EditorController {
         isDegMode = !isDegMode;
         btnDeg.innerText = isDegMode ? 'DEG' : 'RAD';
         if (modeIndicator) modeIndicator.innerText = isDegMode ? 'DEG' : 'RAD';
+        if (typeof playFeedback === 'function') playFeedback('toggle');
       });
     }
 
@@ -3220,6 +3380,7 @@ window.EditorController = class EditorController {
       btnShift.addEventListener('click', () => {
         isShiftActive = !isShiftActive;
         btnShift.classList.toggle('active', isShiftActive);
+        if (typeof playFeedback === 'function') playFeedback('toggle');
         
         // Update Sci Button labels
         calcWidget.querySelectorAll('.btn-sci[data-shift-fn]').forEach(btn => {
@@ -3396,6 +3557,16 @@ window.EditorController = class EditorController {
       const shiftFn = btn.dataset.shiftFn || btn.getAttribute('data-shift-fn');
       const action = btn.dataset.action;
 
+      // Audio & Haptic Feedback on button tap
+      let feedbackType = 'num';
+      if (action === 'equals') feedbackType = 'equals';
+      else if (action === 'clear' || action === 'backspace') feedbackType = 'clear';
+      else if (['add', 'subtract', 'multiply', 'divide', 'percent', 'toggle-sign'].includes(action)) feedbackType = 'operator';
+      else if (fn !== undefined) feedbackType = 'func';
+      else if (insert !== undefined && ['(', ')', 'π', 'e'].includes(insert)) feedbackType = 'operator';
+      else if (action === 'sci') feedbackType = 'toggle';
+      if (typeof playFeedback === 'function') playFeedback(feedbackType);
+
       if (isEvaluated && (val || insert || fn)) {
         if (val || insert) expr = '0';
         isEvaluated = false;
@@ -3497,7 +3668,9 @@ window.EditorController = class EditorController {
 
           const historyText = `${prettyExpr} =`;
           let result = evaluateExpression();
-          if (result !== 'Error') {
+          if (result === 'Error') {
+            if (typeof playFeedback === 'function') playFeedback('error');
+          } else {
             lastAns = result;
             if (isSciMode && typeof result === 'number') {
               result = formatSci(result);
@@ -3518,6 +3691,7 @@ window.EditorController = class EditorController {
     // Copy Result
     if (calcCopy) {
       calcCopy.addEventListener('click', async () => {
+        if (typeof playFeedback === 'function') playFeedback('func');
         try {
           await navigator.clipboard.writeText(expr);
           if (window.CustomDialog) {
@@ -3530,6 +3704,7 @@ window.EditorController = class EditorController {
     // Insert Result to Page
     if (calcInsert) {
       calcInsert.addEventListener('click', () => {
+        if (typeof playFeedback === 'function') playFeedback('equals');
         const view = this.canvasEngine.pageViews[this.currentPageIndex];
         if (!view) return;
 

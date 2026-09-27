@@ -18,10 +18,10 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- App Stylesheets -->
-  <link rel="stylesheet" href="css/reset.css?v=2.13.22">
-  <link rel="stylesheet" href="css/theme.css?v=2.13.22">
-  <link rel="stylesheet" href="css/library.css?v=2.13.22">
-  <link rel="stylesheet" href="css/editor.css?v=2.13.22">
+  <link rel="stylesheet" href="css/reset.css?v=2.13.23">
+  <link rel="stylesheet" href="css/theme.css?v=2.13.23">
+  <link rel="stylesheet" href="css/library.css?v=2.13.23">
+  <link rel="stylesheet" href="css/editor.css?v=2.13.23">
 
   <!-- External Libraries: Google Identity Services, PDF.js & pdf-lib -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -783,6 +783,7 @@
           <span class="calc-mode-badge" id="calc-sci-mode" style="display:none; background: linear-gradient(135deg, #10B981, #059669); color:#FFF; font-size:10.5px; padding:2px 7px; border-radius:6px; font-weight:700; margin-left:4px; letter-spacing:0.5px;">SCI</span>
         </div>
         <div class="calc-header-actions">
+          <button class="calc-icon-btn active" id="btn-calc-sound" title="เปิด/ปิด เสียงและสั่น (Audio & Haptic Feedback)"><i class="fa-solid fa-volume-high"></i></button>
           <button class="calc-icon-btn active" id="btn-calc-dock" title="สลับโหมดแบ่งหน้าจอฝั่งขวา / ลอยอิสระ"><i class="fa-solid fa-table-columns"></i></button>
           <button class="calc-icon-btn" id="btn-calc-copy" title="คัดลอกผลลัพธ์"><i class="fa-regular fa-copy"></i></button>
           <button class="calc-icon-btn" id="btn-calc-insert" title="แทรกลงในโน้ต"><i class="fa-solid fa-file-import"></i></button>
@@ -1146,14 +1147,14 @@
 
   <!-- Standard Application Scripts (No module / Works on file:// protocol!) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/tools.js?v=2.13.22"></script>
-  <script src="js/storage.js?v=2.13.22"></script>
-  <script src="js/canvas.js?v=2.13.22"></script>
-  <script src="js/pdf.js?v=2.13.22"></script>
-  <script src="js/classroom.js?v=2.13.22"></script>
-  <script src="js/library.js?v=2.13.22"></script>
-  <script src="js/editor.js?v=2.13.22"></script>
-  <script src="js/app.js?v=2.13.22"></script>
+  <script src="js/tools.js?v=2.13.23"></script>
+  <script src="js/storage.js?v=2.13.23"></script>
+  <script src="js/canvas.js?v=2.13.23"></script>
+  <script src="js/pdf.js?v=2.13.23"></script>
+  <script src="js/classroom.js?v=2.13.23"></script>
+  <script src="js/library.js?v=2.13.23"></script>
+  <script src="js/editor.js?v=2.13.23"></script>
+  <script src="js/app.js?v=2.13.23"></script>
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
       window.addEventListener('load', () => {
