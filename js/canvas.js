@@ -1290,7 +1290,7 @@ window.CanvasEngine = class CanvasEngine {
       }
 
 
-      const handleHit = this.hitTestSelectionHandles(pt);
+      const handleHit = (this.activePageIndex === view.index) ? this.hitTestSelectionHandles(pt) : null;
       if (handleHit) {
         if (handleHit === 'crop') {
           if (e.cancelable) e.preventDefault();
@@ -1355,28 +1355,28 @@ window.CanvasEngine = class CanvasEngine {
       }
 
       if (this.selectionBox) {
+        // Only interact with selection box if this pointer event is on the same page the selection belongs to
+        if (this.activePageIndex === view.index) {
+          const cx = this.selectionBox.x + this.selectionBox.w / 2;
+          const cy = this.selectionBox.y + this.selectionBox.h / 2;
+          const cos = Math.cos(-this.selectionAngle || 0);
+          const sin = Math.sin(-this.selectionAngle || 0);
+          const localPtX = cx + (pt.x - cx) * cos - (pt.y - cy) * sin;
+          const localPtY = cy + (pt.x - cx) * sin + (pt.y - cy) * cos;
 
-
-
-        const cx = this.selectionBox.x + this.selectionBox.w / 2;
-        const cy = this.selectionBox.y + this.selectionBox.h / 2;
-        const cos = Math.cos(-this.selectionAngle || 0);
-        const sin = Math.sin(-this.selectionAngle || 0);
-        const localPtX = cx + (pt.x - cx) * cos - (pt.y - cy) * sin;
-        const localPtY = cy + (pt.x - cx) * sin + (pt.y - cy) * cos;
-
-        if (localPtX >= this.selectionBox.x && localPtX <= this.selectionBox.x + this.selectionBox.w &&
-            localPtY >= this.selectionBox.y && localPtY <= this.selectionBox.y + this.selectionBox.h) {
-          this.onBeforePageModified(view.index);
-          this.activePageIndex = view.index;
-          this.isDrawing = true;
-          this.isDraggingSelection = true;
-          this.dragStartPos = pt;
-          this.snapshotInitSelectionState();
-          this.initSelectionDragGhost(view, e.clientX, e.clientY);
-          target.setPointerCapture(e.pointerId);
-          if (e.cancelable) e.preventDefault();
-          return;
+          if (localPtX >= this.selectionBox.x && localPtX <= this.selectionBox.x + this.selectionBox.w &&
+              localPtY >= this.selectionBox.y && localPtY <= this.selectionBox.y + this.selectionBox.h) {
+            this.onBeforePageModified(view.index);
+            this.activePageIndex = view.index;
+            this.isDrawing = true;
+            this.isDraggingSelection = true;
+            this.dragStartPos = pt;
+            this.snapshotInitSelectionState();
+            this.initSelectionDragGhost(view, e.clientX, e.clientY);
+            target.setPointerCapture(e.pointerId);
+            if (e.cancelable) e.preventDefault();
+            return;
+          }
         }
 
         this.clearSelection();
@@ -1931,15 +1931,22 @@ window.CanvasEngine = class CanvasEngine {
         // Finalize stroke points positions on pointerup
         if (this.initSelectionState) {
           if (wasDragging && this.dragStartPos) {
-            const dx = (this._dragStartClient ? (e.clientX - this._dragStartClient.x) : (pt.x - this.dragStartPos.x)) / (this._dragStartClient ? this.zoom : 1);
-            const dy = (this._dragStartClient ? (e.clientY - this._dragStartClient.y) : (pt.y - this.dragStartPos.y)) / (this._dragStartClient ? this.zoom : 1);
+            // Use canvas-space delta (dragStartPos is already in canvas coords from getCanvasCoords)
+            // This is immune to auto-scroll affecting clientY/clientX
+            const dx = pt.x - this.dragStartPos.x;
+            const dy = pt.y - this.dragStartPos.y;
 
             const sourceView = this._sourceView || view;
+
+            // For target page detection, use ghost canvas center in client space
+            // _startBoxClient stores where box started on screen; add client delta to find where it landed
+            const clientDeltaX = this._dragStartClient ? (e.clientX - this._dragStartClient.x) : 0;
+            const clientDeltaY = this._dragStartClient ? (e.clientY - this._dragStartClient.y) : 0;
             const boxCenterClientX = this._startBoxClient
-              ? (this._startBoxClient.x + (this._startBoxClient.w / 2) + (e.clientX - this._dragStartClient.x))
+              ? (this._startBoxClient.x + (this._startBoxClient.w / 2) + clientDeltaX)
               : e.clientX;
             const boxCenterClientY = this._startBoxClient
-              ? (this._startBoxClient.y + (this._startBoxClient.h / 2) + (e.clientY - this._dragStartClient.y))
+              ? (this._startBoxClient.y + (this._startBoxClient.h / 2) + clientDeltaY)
               : e.clientY;
 
             const targetView = this.findPageViewAtClientPoint(boxCenterClientX, boxCenterClientY) ||
@@ -3653,11 +3660,17 @@ window.CanvasEngine = class CanvasEngine {
   }
 
   updateSelectionDragGhost(clientX, clientY) {
-    if (!this._dragGhostCanvas || !this._dragStartClient || !this._startBoxClient) return;
+    if (!this._dragGhostCanvas || !this._dragStartClient || !this._startBoxClient || !this._sourceView) return;
     const deltaX = clientX - this._dragStartClient.x;
     const deltaY = clientY - this._dragStartClient.y;
-    const currentX = (this._startBoxClient.x - this._ghostPadding * this.zoom) + deltaX;
-    const currentY = (this._startBoxClient.y - this._ghostPadding * this.zoom) + deltaY;
+
+    // Account for viewport scroll: re-read source container rect to get its current screen position
+    const currentSourceRect = this._sourceView.container.getBoundingClientRect();
+    const currentBoxScreenX = currentSourceRect.left + (this.initSelectionState ? this.initSelectionState.box.x * this.zoom : 0);
+    const currentBoxScreenY = currentSourceRect.top + (this.initSelectionState ? this.initSelectionState.box.y * this.zoom : 0);
+
+    const currentX = currentBoxScreenX - this._ghostPadding * this.zoom + deltaX;
+    const currentY = currentBoxScreenY - this._ghostPadding * this.zoom + deltaY;
     this._dragGhostCanvas.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
 
     // Auto-scroll near edges
