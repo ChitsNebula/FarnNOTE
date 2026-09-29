@@ -2140,6 +2140,7 @@ window.CanvasEngine = class CanvasEngine {
               });
               if (s.tool === 'fill' && s.bounds && this.initSelectionState.strokeBounds && this.initSelectionState.strokeBounds[idx]) {
                 const initB = this.initSelectionState.strokeBounds[idx];
+                const initRot = (this.initSelectionState.strokeRotations && this.initSelectionState.strokeRotations[idx]) || 0;
                 const bCenterX = initB.x + initB.w / 2;
                 const bCenterY = initB.y + initB.h / 2;
                 const pdx = bCenterX - centerX;
@@ -2148,6 +2149,7 @@ window.CanvasEngine = class CanvasEngine {
                 const newCenterY = centerY + pdx * sin + pdy * cos;
                 s.bounds.x = newCenterX - initB.w / 2;
                 s.bounds.y = newCenterY - initB.h / 2;
+                s.rotation = (initRot + (effectiveDeltaRad * 180 / Math.PI)) % 360;
               }
               s._box = null;
             });
@@ -2398,6 +2400,7 @@ window.CanvasEngine = class CanvasEngine {
       angle: this.selectionAngle || 0,
       strokes: this.selectedStrokes.map(s => s.points.map(p => ({ ...p }))),
       strokeBounds: this.selectedStrokes.map(s => s.bounds ? { ...s.bounds } : null),
+      strokeRotations: this.selectedStrokes.map(s => s.rotation || 0),
       images: this.selectedImages.map(img => ({ ...img })),
       textBoxes: this.selectedTextBoxes.map(tb => ({ ...tb }))
     };
@@ -2456,6 +2459,7 @@ window.CanvasEngine = class CanvasEngine {
         const tempStroke = { ...s, points: tempPts };
         if (s.tool === 'fill' && this.initSelectionState.strokeBounds && this.initSelectionState.strokeBounds[sIdx]) {
           const initB = this.initSelectionState.strokeBounds[sIdx];
+          const initRot = (this.initSelectionState.strokeRotations && this.initSelectionState.strokeRotations[sIdx]) || 0;
           if (scale !== 1) {
             tempStroke.bounds = {
               x: initBox.x + (initB.x - initBox.x) * scale + (this.selectionBox.x - initBox.x),
@@ -2463,6 +2467,7 @@ window.CanvasEngine = class CanvasEngine {
               w: Math.max(1, initB.w * scale),
               h: Math.max(1, initB.h * scale)
             };
+            tempStroke.rotation = initRot;
           } else if (angleRad !== 0) {
             const bCenterX = initB.x + initB.w / 2;
             const bCenterY = initB.y + initB.h / 2;
@@ -2475,12 +2480,14 @@ window.CanvasEngine = class CanvasEngine {
               x: rx - initB.w / 2,
               y: ry - initB.h / 2
             };
+            tempStroke.rotation = (initRot + (angleRad * 180 / Math.PI)) % 360;
           } else {
             tempStroke.bounds = {
               ...initB,
               x: initB.x + dx,
               y: initB.y + dy
             };
+            tempStroke.rotation = initRot;
           }
         }
         this.drawSingleStroke(ctx, tempStroke);
@@ -2793,12 +2800,26 @@ window.CanvasEngine = class CanvasEngine {
       const b = stroke.bounds || stroke.bbox;
       if (b) {
         ctx.save();
+        const cx = b.x + b.w / 2;
+        const cy = b.y + b.h / 2;
+        if (stroke.rotation) {
+          ctx.translate(cx, cy);
+          ctx.rotate((stroke.rotation * Math.PI) / 180);
+          ctx.translate(-cx, -cy);
+        }
         if (stroke.dataUrl) {
           if (!stroke._img) {
             const img = new Image();
             img.onload = () => {
               if (ctx && ctx.canvas) {
+                ctx.save();
+                if (stroke.rotation) {
+                  ctx.translate(cx, cy);
+                  ctx.rotate((stroke.rotation * Math.PI) / 180);
+                  ctx.translate(-cx, -cy);
+                }
                 ctx.drawImage(img, b.x, b.y, b.w, b.h);
+                ctx.restore();
               }
             };
             img.src = stroke.dataUrl;
@@ -2947,7 +2968,18 @@ window.CanvasEngine = class CanvasEngine {
   getStrokeAABB(s) {
     if (s._box) return s._box;
     if (s.tool === 'fill' && s.bounds) {
-      s._box = { minX: s.bounds.x, maxX: s.bounds.x + s.bounds.w, minY: s.bounds.y, maxY: s.bounds.y + s.bounds.h };
+      if (s.rotation) {
+        const cx = s.bounds.x + s.bounds.w / 2;
+        const cy = s.bounds.y + s.bounds.h / 2;
+        const rad = (s.rotation * Math.PI) / 180;
+        const cos = Math.abs(Math.cos(rad));
+        const sin = Math.abs(Math.sin(rad));
+        const hw = (s.bounds.w * cos + s.bounds.h * sin) / 2;
+        const hh = (s.bounds.w * sin + s.bounds.h * cos) / 2;
+        s._box = { minX: cx - hw, maxX: cx + hw, minY: cy - hh, maxY: cy + hh };
+      } else {
+        s._box = { minX: s.bounds.x, maxX: s.bounds.x + s.bounds.w, minY: s.bounds.y, maxY: s.bounds.y + s.bounds.h };
+      }
       return s._box;
     }
     if (!s.points || s.points.length === 0) return null;
@@ -3225,8 +3257,17 @@ window.CanvasEngine = class CanvasEngine {
         }
         // Fill stroke eraser hit check
         if (s.tool === 'fill' && s.bounds) {
-          const hit = (pt.x >= s.bounds.x - radius && pt.x <= s.bounds.x + s.bounds.w + radius && 
-                       pt.y >= s.bounds.y - radius && pt.y <= s.bounds.y + s.bounds.h + radius);
+          const b = s.bounds;
+          const cx = b.x + b.w / 2;
+          const cy = b.y + b.h / 2;
+          const rot = -(s.rotation || 0) * Math.PI / 180;
+          const cos = Math.cos(rot);
+          const sin = Math.sin(rot);
+          const dx = pt.x - cx;
+          const dy = pt.y - cy;
+          const lx = dx * cos - dy * sin;
+          const ly = dx * sin + dy * cos;
+          const hit = (Math.abs(lx) <= b.w / 2 + radius && Math.abs(ly) <= b.h / 2 + radius);
           return !hit;
         }
         // 2. Exact squared distance check on points (avoids heavy Math.hypot / sqrt)
