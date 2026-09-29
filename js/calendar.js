@@ -466,13 +466,13 @@
       return `
         <div class="cal-month-card">
           <div class="cal-weekdays-row">
-            <div class="weekend">อาทิตย์</div>
-            <div>จันทร์</div>
-            <div>อังคาร</div>
-            <div>พุธ</div>
-            <div>พฤหัสบดี</div>
-            <div>ศุกร์</div>
-            <div class="weekend">เสาร์</div>
+            <div class="cal-weekday-col day-sun"><span class="cal-weekday-pill">อาทิตย์</span></div>
+            <div class="cal-weekday-col day-mon"><span class="cal-weekday-pill">จันทร์</span></div>
+            <div class="cal-weekday-col day-tue"><span class="cal-weekday-pill">อังคาร</span></div>
+            <div class="cal-weekday-col day-wed"><span class="cal-weekday-pill">พุธ</span></div>
+            <div class="cal-weekday-col day-thu"><span class="cal-weekday-pill">พฤหัสบดี</span></div>
+            <div class="cal-weekday-col day-fri"><span class="cal-weekday-pill">ศุกร์</span></div>
+            <div class="cal-weekday-col day-sat"><span class="cal-weekday-pill">เสาร์</span></div>
           </div>
           <div class="cal-days-grid" id="cal-month-grid">
             ${gridHtml}
@@ -482,6 +482,8 @@
     }
 
     renderDayCell(dateIso, dayNum, isOtherMonth, isToday, allEvents) {
+      const parts = dateIso.split('-');
+      const dayOfWeek = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getDay();
       const dayEvents = allEvents.filter(e => e.date === dateIso);
 
       let eventsHtml = '';
@@ -512,7 +514,7 @@
       }
 
       return `
-        <div class="cal-day-cell ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}" data-date="${dateIso}">
+        <div class="cal-day-cell day-col-${dayOfWeek} ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}" data-date="${dateIso}">
           <div class="cal-day-header">
             <span class="cal-day-num">${dayNum}</span>
           </div>
@@ -549,7 +551,7 @@
         const thaiDays = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
 
         html += `
-          <div class="cal-agenda-day-card ${isToday ? 'today' : ''}" data-date="${iso}">
+          <div class="cal-agenda-day-card day-week-${d.getDay()} ${isToday ? 'today' : ''}" data-date="${iso}">
             <div class="cal-agenda-day-title">
               <span><strong>${thaiDays[d.getDay()]}</strong> (${d.getDate()} ${this.getThaiMonthName(d.getMonth())})</span>
               ${isToday ? '<span class="cal-side-date-badge">วันนี้</span>' : ''}
