@@ -167,27 +167,22 @@
 
       // 2. Render Full LifeCalendar Interface
       this.container.innerHTML = `
-        <header class="cal-nav-header">
-          <div class="cal-header-left">
+        <!-- Primary Top Bar -->
+        <header class="cal-top-bar">
+          <div class="cal-top-left">
             <button class="cal-btn-back" id="cal-btn-back-lib" title="กลับไปหน้าสมุดโน้ต">
               <i class="fa-solid fa-arrow-left"></i>
               <span>สมุดโน้ต</span>
             </button>
-            <div class="cal-header-title-wrap" style="display: flex; align-items: center; gap: 10px;">
+            <div class="cal-brand-tag">
               <div class="cal-header-brand-badge">
                 <i class="fa-solid fa-calendar-days"></i>
               </div>
-              <h2 class="cal-header-title">ปฏิทินชีวิต</h2>
+              <h2 class="cal-brand-text">ปฏิทินชีวิต</h2>
             </div>
-            <div class="cal-nav-arrows">
-              <button class="cal-arrow-btn" id="cal-prev-btn" title="ก่อนหน้า"><i class="fa-solid fa-chevron-left"></i></button>
-              <button class="cal-btn-today" id="cal-today-btn">วันนี้</button>
-              <button class="cal-arrow-btn" id="cal-next-btn" title="ถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
-            </div>
-            <span class="cal-current-label" id="cal-period-label">${this.getPeriodLabel()}</span>
           </div>
 
-          <div class="cal-nav-tabs">
+          <nav class="cal-nav-tabs">
             <button class="cal-tab-btn ${this.activeTab === 'calendar' ? 'active' : ''}" data-tab="calendar">
               <i class="fa-regular fa-calendar"></i>
               <span>ปฏิทิน</span>
@@ -212,17 +207,9 @@
               <span>งานค้าง & เตือน</span>
               <span class="cal-tab-badge" id="cal-badge-backlog">${this.reminders.length}</span>
             </button>
-          </div>
+          </nav>
 
-          <div class="cal-header-right">
-            ${this.activeTab === 'calendar' ? `
-            <div class="cal-view-switch">
-              <button class="cal-view-btn ${this.currentView === 'month' ? 'active' : ''}" data-view="month">เดือน</button>
-              <button class="cal-view-btn ${this.currentView === 'week' ? 'active' : ''}" data-view="week">สัปดาห์</button>
-              <button class="cal-view-btn ${this.currentView === 'day' ? 'active' : ''}" data-view="day">วัน</button>
-            </div>
-            ` : ''}
-
+          <div class="cal-top-right">
             <button class="cal-btn-sync ${this.isSyncing ? 'spinning' : ''}" id="cal-btn-sync" title="ซิงค์กับ Google Calendar">
               <i class="fa-solid fa-arrows-rotate"></i>
               <span>ซิงค์</span>
@@ -230,12 +217,17 @@
 
             <button class="cal-btn-add" id="cal-btn-quick-add">
               <i class="fa-solid fa-plus"></i>
-              <span>เพิ่ม</span>
+              <span>เพิ่มรายการ</span>
             </button>
 
             <img class="cal-user-avatar" id="cal-user-avatar" src="${this.currentUser.picture || 'icon-192.png'}" title="${this.escapeHtml(this.currentUser.name || this.currentUser.email)} (คลิกเพื่อดูตัวเลือก)" alt="User">
           </div>
         </header>
+
+        <!-- Sub Contextual Toolbar -->
+        <div class="cal-sub-bar">
+          ${this.renderSubBarContent()}
+        </div>
 
         <div class="cal-main-layout">
           <main class="cal-content-area" id="cal-view-container">
@@ -251,6 +243,94 @@
       this.bindHeaderEvents();
       this.bindTabEvents();
       this.updateBadgeCounts();
+    }
+
+    renderSubBarContent() {
+      if (this.activeTab === 'calendar') {
+        return `
+          <div class="cal-sub-bar-left">
+            <div class="cal-nav-arrows">
+              <button class="cal-arrow-btn" id="cal-prev-btn" title="ก่อนหน้า"><i class="fa-solid fa-chevron-left"></i></button>
+              <button class="cal-btn-today" id="cal-today-btn">วันนี้</button>
+              <button class="cal-arrow-btn" id="cal-next-btn" title="ถัดไป"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+            <span class="cal-period-title" id="cal-period-label">${this.getPeriodLabel()}</span>
+          </div>
+
+          <div class="cal-sub-bar-right">
+            <div class="cal-view-switch">
+              <button class="cal-view-btn ${this.currentView === 'month' ? 'active' : ''}" data-view="month">เดือน</button>
+              <button class="cal-view-btn ${this.currentView === 'week' ? 'active' : ''}" data-view="week">สัปดาห์</button>
+              <button class="cal-view-btn ${this.currentView === 'day' ? 'active' : ''}" data-view="day">วัน</button>
+            </div>
+            <button class="cal-btn-toggle-side ${this.sidePanelCollapsed ? '' : 'active'}" id="cal-btn-toggle-side" title="ซ่อน/แสดงแถบสรุปวันนี้">
+              <i class="fa-solid fa-table-columns"></i>
+              <span>สรุปวันนี้</span>
+            </button>
+          </div>
+        `;
+      }
+
+      if (this.activeTab === 'todo') {
+        return `
+          <div class="cal-sub-bar-left">
+            <span class="cal-sub-bar-title"><i class="fa-solid fa-list-check" style="color: var(--cal-green);"></i> รายการสิ่งที่ต้องทำ (To-Do List)</span>
+          </div>
+          <div class="cal-sub-bar-right">
+            <span style="font-size: 13px; color: var(--cal-text-secondary); font-weight: 500;">
+              ค้างอยู่ ${this.getPendingTodoCount()} งาน
+            </span>
+            <button class="cal-btn-toggle-side ${this.sidePanelCollapsed ? '' : 'active'}" id="cal-btn-toggle-side" title="ซ่อน/แสดงแถบสรุปวันนี้">
+              <i class="fa-solid fa-table-columns"></i>
+              <span>สรุปวันนี้</span>
+            </button>
+          </div>
+        `;
+      }
+
+      if (this.activeTab === 'deadline') {
+        return `
+          <div class="cal-sub-bar-left">
+            <span class="cal-sub-bar-title"><i class="fa-solid fa-clock-rotate-left" style="color: var(--cal-red);"></i> กำหนดส่ง & เดดไลน์ (Deadlines)</span>
+          </div>
+          <div class="cal-sub-bar-right">
+            <button class="cal-btn-toggle-side ${this.sidePanelCollapsed ? '' : 'active'}" id="cal-btn-toggle-side" title="ซ่อน/แสดงแถบสรุปวันนี้">
+              <i class="fa-solid fa-table-columns"></i>
+              <span>สรุปวันนี้</span>
+            </button>
+          </div>
+        `;
+      }
+
+      if (this.activeTab === 'reading') {
+        return `
+          <div class="cal-sub-bar-left">
+            <span class="cal-sub-bar-title"><i class="fa-solid fa-book-bookmark" style="color: var(--cal-purple);"></i> แผนการอ่านหนังสือ (Reading Planner)</span>
+          </div>
+          <div class="cal-sub-bar-right">
+            <button class="cal-btn-toggle-side ${this.sidePanelCollapsed ? '' : 'active'}" id="cal-btn-toggle-side" title="ซ่อน/แสดงแถบสรุปวันนี้">
+              <i class="fa-solid fa-table-columns"></i>
+              <span>สรุปวันนี้</span>
+            </button>
+          </div>
+        `;
+      }
+
+      if (this.activeTab === 'backlog') {
+        return `
+          <div class="cal-sub-bar-left">
+            <span class="cal-sub-bar-title"><i class="fa-solid fa-note-sticky" style="color: var(--cal-primary);"></i> งานค้าง & โน้ตเตือนความจำ (Backlog)</span>
+          </div>
+          <div class="cal-sub-bar-right">
+            <button class="cal-btn-toggle-side ${this.sidePanelCollapsed ? '' : 'active'}" id="cal-btn-toggle-side" title="ซ่อน/แสดงแถบสรุปวันนี้">
+              <i class="fa-solid fa-table-columns"></i>
+              <span>สรุปวันนี้</span>
+            </button>
+          </div>
+        `;
+      }
+
+      return '';
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -882,6 +962,12 @@
       // Quick add button
       document.getElementById('cal-btn-quick-add')?.addEventListener('click', () => {
         this.openQuickAddModal();
+      });
+
+      // Side panel toggle
+      document.getElementById('cal-btn-toggle-side')?.addEventListener('click', () => {
+        this.sidePanelCollapsed = !this.sidePanelCollapsed;
+        this.render();
       });
 
       // User avatar click (Logout / Info)
