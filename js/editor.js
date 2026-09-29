@@ -784,7 +784,14 @@ window.EditorController = class EditorController {
         : ((this.currentNotebook && this.currentNotebook.orientation === 'landscape') || false);
       const width  = curPage ? curPage.width  : (isLandscape ? 1123 : 794);
       const height = curPage ? curPage.height : (isLandscape ? 794  : 1123);
-      const template = curPage ? (curPage.template || this.currentNotebook.template || 'grid') : (this.currentNotebook.template || 'grid');
+      let template = 'grid';
+      if (curPage && curPage.template && curPage.template !== 'pdf') {
+        template = curPage.template;
+      } else if (this.currentNotebook && this.currentNotebook.template && this.currentNotebook.template !== 'pdf') {
+        template = this.currentNotebook.template;
+      } else {
+        template = 'blank';
+      }
 
       // Insert immediately after current page!
       const insertIndex = (this.pages && this.pages.length > 0) ? (this.currentPageIndex + 1) : 0;
@@ -796,6 +803,8 @@ window.EditorController = class EditorController {
         width,
         height,
         template,
+        pdfAssetId: null,
+        pdfPageNum: null,
         strokes: [],
         textBoxes: [],
         images: []
@@ -2359,13 +2368,24 @@ window.EditorController = class EditorController {
     const width  = isLandscape ? (curPage.width  || 1123) : 794;
     const height = isLandscape ? (curPage.height || 794)  : 1123;
 
+    let template = 'grid';
+    if (curPage && curPage.template && curPage.template !== 'pdf') {
+      template = curPage.template;
+    } else if (this.currentNotebook && this.currentNotebook.template && this.currentNotebook.template !== 'pdf') {
+      template = this.currentNotebook.template;
+    } else {
+      template = 'blank';
+    }
+
     const newPage = {
       id: `page-${this.currentNotebook.id}-${Date.now()}`,
       notebookId: this.currentNotebook.id,
       index: pageIndex + 1,
       width,
       height,
-      template: this.currentNotebook.template || 'grid',
+      template,
+      pdfAssetId: null,
+      pdfPageNum: null,
       strokes: [],
       textBoxes: [],
       images: []

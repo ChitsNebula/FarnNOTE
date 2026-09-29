@@ -134,6 +134,7 @@ window.PDFEngine = {
         height:     firstH,
         template:   'pdf',
         pdfAssetId: assetId,
+        pdfPageNum: pageNum,
         strokes:    [],
         textBoxes:  [],
         images:     []
@@ -426,6 +427,7 @@ window.PDFEngine = {
       }
 
       if (originalPdfDoc) {
+        const outPdfDoc = await PDFDocument.create();
         const total = pages.length;
         for (let i = 0; i < total; i++) {
           if (typeof onProgress === 'function') {
@@ -436,18 +438,26 @@ window.PDFEngine = {
           const w = pageData.width  || 794;
           const h = pageData.height || 1123;
 
+          let pdfPageNum = pageData.pdfPageNum;
+          if (!pdfPageNum && pageData.pdfAssetId) {
+            const m = pageData.pdfAssetId.match(/-page-(\d+)$/);
+            if (m) pdfPageNum = parseInt(m[1], 10);
+          }
+
+          let pdfPage;
+          if (pdfPageNum && pdfPageNum >= 1 && pdfPageNum <= originalPdfDoc.getPageCount()) {
+            const [copied] = await outPdfDoc.copyPages(originalPdfDoc, [pdfPageNum - 1]);
+            pdfPage = outPdfDoc.addPage(copied);
+          } else {
+            // Inserted or blank page
+            pdfPage = outPdfDoc.addPage([w, h]);
+          }
+
           // Build annotation-only canvas (transparent background)
           const hasAnnotations =
             (pageData.strokes    && pageData.strokes.length)    ||
             (pageData.textBoxes  && pageData.textBoxes.length)  ||
             (pageData.images     && pageData.images.length);
-
-          let pdfPage;
-          if (i < originalPdfDoc.getPageCount()) {
-            pdfPage = originalPdfDoc.getPage(i);
-          } else {
-            pdfPage = originalPdfDoc.addPage([w, h]);
-          }
 
           if (hasAnnotations) {
             const annotCanvas = document.createElement('canvas');
@@ -494,7 +504,7 @@ window.PDFEngine = {
 
             // Embed annotation PNG into PDF page (scaled to full PDF page size in points)
             const pngDataUrl = annotCanvas.toDataURL('image/png');
-            const pngImage   = await originalPdfDoc.embedPng(pngDataUrl);
+            const pngImage   = await outPdfDoc.embedPng(pngDataUrl);
             const { width: pdfW, height: pdfH } = pdfPage.getSize();
             pdfPage.drawImage(pngImage, { x: 0, y: 0, width: pdfW, height: pdfH });
           }
@@ -502,7 +512,7 @@ window.PDFEngine = {
           await new Promise(r => setTimeout(r, 0));
         }
 
-        return await originalPdfDoc.save();
+        return await outPdfDoc.save();
       }
     }
 

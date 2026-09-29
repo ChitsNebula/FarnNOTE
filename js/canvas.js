@@ -910,13 +910,21 @@ window.CanvasEngine = class CanvasEngine {
             // PDF.js renders at full DPR — no rasterization artifacts, no WebP blur.
             ;(async () => {
               try {
+                let pdfPageNum = pageData.pdfPageNum;
+                if (!pdfPageNum && pageData.pdfAssetId) {
+                  const m = pageData.pdfAssetId.match(/-page-(\d+)$/);
+                  if (m) pdfPageNum = parseInt(m[1], 10);
+                }
+                if (!pdfPageNum) return; // Non-PDF page: never overwrite with PDF!
+
                 const pdfDoc = window.PDFEngine && typeof window.PDFEngine.getPDFDoc === 'function'
                   ? await window.PDFEngine.getPDFDoc(pageData.notebookId, this.storage)
                   : null;
 
                 if (!pdfDoc || view._renderSession !== session || !view.bgCtx) return;
+                if (pdfPageNum < 1 || pdfPageNum > pdfDoc.numPages) return;
 
-                const pdfPage   = await pdfDoc.getPage(view.index + 1);
+                const pdfPage   = await pdfDoc.getPage(pdfPageNum);
                 const unscaledVp = pdfPage.getViewport({ scale: 1.0 });
                 const vecScale  = (width * dpr) / unscaledVp.width;
                 const vecVp     = pdfPage.getViewport({ scale: vecScale });
@@ -947,47 +955,55 @@ window.CanvasEngine = class CanvasEngine {
             // ─── No cached image at all → pure on-demand render ───
             let renderedOnDemand = false;
             try {
-              const pdfDoc = window.PDFEngine && typeof window.PDFEngine.getPDFDoc === 'function'
-                ? await window.PDFEngine.getPDFDoc(pageData.notebookId, this.storage)
-                : null;
+              let pdfPageNum = pageData.pdfPageNum;
+              if (!pdfPageNum && pageData.pdfAssetId) {
+                const m = pageData.pdfAssetId.match(/-page-(\d+)$/);
+                if (m) pdfPageNum = parseInt(m[1], 10);
+              }
 
-              if (view._renderSession !== session || !view.bgCanvas) return;
+              if (pdfPageNum) {
+                const pdfDoc = window.PDFEngine && typeof window.PDFEngine.getPDFDoc === 'function'
+                  ? await window.PDFEngine.getPDFDoc(pageData.notebookId, this.storage)
+                  : null;
 
-              if (pdfDoc) {
-                const pdfPage = await pdfDoc.getPage(view.index + 1);
-                const unscaledVp = pdfPage.getViewport({ scale: 1.0 });
-                // Full DPR-scale: no artificial cap — matches the import resolution exactly
-                const fitScale = (width * dpr) / unscaledVp.width;
-                const renderVp = pdfPage.getViewport({ scale: fitScale });
-                const rW = Math.round(renderVp.width);
-                const rH = Math.round(renderVp.height);
+                if (view._renderSession !== session || !view.bgCanvas) return;
 
-                const renderCanvas = document.createElement('canvas');
-                renderCanvas.width = rW;
-                renderCanvas.height = rH;
-                const rCtx = renderCanvas.getContext('2d', { alpha: false });
-                rCtx.fillStyle = '#FFFFFF';
-                rCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
-                await pdfPage.render({ canvasContext: rCtx, viewport: renderVp }).promise;
+                if (pdfDoc && pdfPageNum >= 1 && pdfPageNum <= pdfDoc.numPages) {
+                  const pdfPage = await pdfDoc.getPage(pdfPageNum);
+                  const unscaledVp = pdfPage.getViewport({ scale: 1.0 });
+                  // Full DPR-scale: no artificial cap — matches the import resolution exactly
+                  const fitScale = (width * dpr) / unscaledVp.width;
+                  const renderVp = pdfPage.getViewport({ scale: fitScale });
+                  const rW = Math.round(renderVp.width);
+                  const rH = Math.round(renderVp.height);
 
-                if (view._renderSession === session && view.bgCtx) {
-                  view.bgCtx.drawImage(renderCanvas, 0, 0, width, height);
-                }
+                  const renderCanvas = document.createElement('canvas');
+                  renderCanvas.width = rW;
+                  renderCanvas.height = rH;
+                  const rCtx = renderCanvas.getContext('2d', { alpha: false });
+                  rCtx.fillStyle = '#FFFFFF';
+                  rCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
+                  await pdfPage.render({ canvasContext: rCtx, viewport: renderVp }).promise;
 
-                let newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/webp', 0.98));
-                if (!newBlob) {
-                  newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/png'));
-                }
-                if (newBlob) {
-                  await this.storage.saveAsset(pageData.pdfAssetId, newBlob);
-                  if (!view._blobUrl) {
-                    view._blobUrl = URL.createObjectURL(newBlob);
-                    container.style.backgroundImage = `url("${view._blobUrl}")`;
-                    container.style.backgroundSize = '100% 100%';
-                    container.style.backgroundRepeat = 'no-repeat';
+                  if (view._renderSession === session && view.bgCtx) {
+                    view.bgCtx.drawImage(renderCanvas, 0, 0, width, height);
                   }
+
+                  let newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/webp', 0.98));
+                  if (!newBlob) {
+                    newBlob = await new Promise(r => renderCanvas.toBlob(r, 'image/png'));
+                  }
+                  if (newBlob) {
+                    await this.storage.saveAsset(pageData.pdfAssetId, newBlob);
+                    if (!view._blobUrl) {
+                      view._blobUrl = URL.createObjectURL(newBlob);
+                      container.style.backgroundImage = `url("${view._blobUrl}")`;
+                      container.style.backgroundSize = '100% 100%';
+                      container.style.backgroundRepeat = 'no-repeat';
+                    }
+                  }
+                  renderedOnDemand = true;
                 }
-                renderedOnDemand = true;
               }
             } catch (e) {
               console.warn('On-demand PDF render failed:', e);
