@@ -173,8 +173,11 @@
               <i class="fa-solid fa-arrow-left"></i>
               <span>สมุดโน้ต</span>
             </button>
-            <div class="cal-header-title-wrap">
-              <h2 class="cal-header-title"><i class="fa-solid fa-calendar-check" style="color: var(--cal-blue); margin-right: 6px;"></i>ปฏิทินชีวิต</h2>
+            <div class="cal-header-title-wrap" style="display: flex; align-items: center; gap: 10px;">
+              <div class="cal-header-brand-badge">
+                <i class="fa-solid fa-calendar-days"></i>
+              </div>
+              <h2 class="cal-header-title">ปฏิทินชีวิต</h2>
             </div>
             <div class="cal-nav-arrows">
               <button class="cal-arrow-btn" id="cal-prev-btn" title="ก่อนหน้า"><i class="fa-solid fa-chevron-left"></i></button>
@@ -380,7 +383,7 @@
       }
 
       return `
-        <div class="cal-month-container">
+        <div class="cal-month-card">
           <div class="cal-weekdays-row">
             <div class="weekend">อาทิตย์</div>
             <div>จันทร์</div>
