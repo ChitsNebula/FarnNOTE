@@ -1984,6 +1984,11 @@ window.CanvasEngine = class CanvasEngine {
                       p.y = initPts[pIdx].y + finalShiftY;
                     });
                   }
+                  if (s.tool === 'fill' && s.bounds && this.initSelectionState.strokeBounds && this.initSelectionState.strokeBounds[idx]) {
+                    const initB = this.initSelectionState.strokeBounds[idx];
+                    s.bounds.x = initB.x + finalShiftX;
+                    s.bounds.y = initB.y + finalShiftY;
+                  }
                   s._box = null;
                 });
                 targetView.pageData.strokes.push(...this.selectedStrokes);
@@ -2047,6 +2052,11 @@ window.CanvasEngine = class CanvasEngine {
                     p.x = initPts[pIdx].x + dx;
                     p.y = initPts[pIdx].y + dy;
                   });
+                  if (s.tool === 'fill' && s.bounds && this.initSelectionState.strokeBounds && this.initSelectionState.strokeBounds[idx]) {
+                    const initB = this.initSelectionState.strokeBounds[idx];
+                    s.bounds.x = initB.x + dx;
+                    s.bounds.y = initB.y + dy;
+                  }
                   s._box = null;
                 });
               }
@@ -2090,6 +2100,14 @@ window.CanvasEngine = class CanvasEngine {
                 p.x = newX + (initPt.x - initBox.x) * scale;
                 p.y = newY + (initPt.y - initBox.y) * scale;
               });
+              if (s.tool === 'fill' && s.bounds && this.initSelectionState.strokeBounds && this.initSelectionState.strokeBounds[idx]) {
+                const initB = this.initSelectionState.strokeBounds[idx];
+                s.bounds.x = newX + (initB.x - initBox.x) * scale;
+                s.bounds.y = newY + (initB.y - initBox.y) * scale;
+                s.bounds.w = Math.max(1, initB.w * scale);
+                s.bounds.h = Math.max(1, initB.h * scale);
+              }
+              s._box = null;
             });
             this.selectedTextBoxes.forEach((tb, idx) => {
               const initTb = this.initSelectionState.textBoxes[idx];
@@ -2120,6 +2138,18 @@ window.CanvasEngine = class CanvasEngine {
                 p.x = centerX + pdx * cos - pdy * sin;
                 p.y = centerY + pdx * sin + pdy * cos;
               });
+              if (s.tool === 'fill' && s.bounds && this.initSelectionState.strokeBounds && this.initSelectionState.strokeBounds[idx]) {
+                const initB = this.initSelectionState.strokeBounds[idx];
+                const bCenterX = initB.x + initB.w / 2;
+                const bCenterY = initB.y + initB.h / 2;
+                const pdx = bCenterX - centerX;
+                const pdy = bCenterY - centerY;
+                const newCenterX = centerX + pdx * cos - pdy * sin;
+                const newCenterY = centerY + pdx * sin + pdy * cos;
+                s.bounds.x = newCenterX - initB.w / 2;
+                s.bounds.y = newCenterY - initB.h / 2;
+              }
+              s._box = null;
             });
             this.renderPageStrokes(view);
             this.renderPageImages(view);
@@ -2367,6 +2397,7 @@ window.CanvasEngine = class CanvasEngine {
       box: { ...this.selectionBox },
       angle: this.selectionAngle || 0,
       strokes: this.selectedStrokes.map(s => s.points.map(p => ({ ...p }))),
+      strokeBounds: this.selectedStrokes.map(s => s.bounds ? { ...s.bounds } : null),
       images: this.selectedImages.map(img => ({ ...img })),
       textBoxes: this.selectedTextBoxes.map(tb => ({ ...tb }))
     };
@@ -2423,6 +2454,35 @@ window.CanvasEngine = class CanvasEngine {
         });
 
         const tempStroke = { ...s, points: tempPts };
+        if (s.tool === 'fill' && this.initSelectionState.strokeBounds && this.initSelectionState.strokeBounds[sIdx]) {
+          const initB = this.initSelectionState.strokeBounds[sIdx];
+          if (scale !== 1) {
+            tempStroke.bounds = {
+              x: initBox.x + (initB.x - initBox.x) * scale + (this.selectionBox.x - initBox.x),
+              y: initBox.y + (initB.y - initBox.y) * scale + (this.selectionBox.y - initBox.y),
+              w: Math.max(1, initB.w * scale),
+              h: Math.max(1, initB.h * scale)
+            };
+          } else if (angleRad !== 0) {
+            const bCenterX = initB.x + initB.w / 2;
+            const bCenterY = initB.y + initB.h / 2;
+            const px = bCenterX - cx;
+            const py = bCenterY - cy;
+            const rx = cx + px * cos - py * sin;
+            const ry = cy + px * sin + py * cos;
+            tempStroke.bounds = {
+              ...initB,
+              x: rx - initB.w / 2,
+              y: ry - initB.h / 2
+            };
+          } else {
+            tempStroke.bounds = {
+              ...initB,
+              x: initB.x + dx,
+              y: initB.y + dy
+            };
+          }
+        }
         this.drawSingleStroke(ctx, tempStroke);
       });
     }
@@ -3281,6 +3341,34 @@ window.CanvasEngine = class CanvasEngine {
     // 1. Select Strokes inside Lasso
     if (view.pageData.strokes) {
       this.selectedStrokes = view.pageData.strokes.filter(s => {
+        // Special check for fill stroke (flood fill)
+        if (s.tool === 'fill' && s.bounds) {
+          const b = s.bounds;
+          // AABB Rejection
+          if (b.x + b.w < lMinX - 5 || b.x > lMaxX + 5 || b.y + b.h < lMinY - 5 || b.y > lMaxY + 5) {
+            return false;
+          }
+          // 1. If any test point of the fill (corners + center) is in polygon
+          const testPts = [
+            { x: b.x, y: b.y },
+            { x: b.x + b.w, y: b.y },
+            { x: b.x, y: b.y + b.h },
+            { x: b.x + b.w, y: b.y + b.h },
+            { x: b.x + b.w / 2, y: b.y + b.h / 2 }
+          ];
+          for (let p of testPts) {
+            if (window.isPointInPolygon(p, poly)) return true;
+          }
+          // 2. If any point of the lasso polygon is inside fill bounds
+          for (let i = 0; i < poly.length; i += 2) {
+            const lp = poly[i];
+            if (lp.x >= b.x && lp.x <= b.x + b.w && lp.y >= b.y && lp.y <= b.y + b.h) {
+              return true;
+            }
+          }
+          return false;
+        }
+
         if (!s.points || s.points.length === 0) return false;
         let sMinX = Infinity, sMaxX = -Infinity, sMinY = Infinity, sMaxY = -Infinity;
         for (let j = 0; j < s.points.length; j++) {
@@ -3353,12 +3441,19 @@ window.CanvasEngine = class CanvasEngine {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
 
     this.selectedStrokes.forEach(s => {
-      s.points.forEach(p => {
-        minX = Math.min(minX, p.x);
-        maxX = Math.max(maxX, p.x);
-        minY = Math.min(minY, p.y);
-        maxY = Math.max(maxY, p.y);
-      });
+      if (s.tool === 'fill' && s.bounds) {
+        minX = Math.min(minX, s.bounds.x);
+        maxX = Math.max(maxX, s.bounds.x + s.bounds.w);
+        minY = Math.min(minY, s.bounds.y);
+        maxY = Math.max(maxY, s.bounds.y + s.bounds.h);
+      } else if (s.points) {
+        s.points.forEach(p => {
+          minX = Math.min(minX, p.x);
+          maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y);
+          maxY = Math.max(maxY, p.y);
+        });
+      }
     });
 
     this.selectedImages.forEach(img => {
@@ -3754,6 +3849,10 @@ window.CanvasEngine = class CanvasEngine {
           p.x += offset;
           p.y += offset;
         });
+        if (cloned.tool === 'fill' && cloned.bounds) {
+          cloned.bounds.x += offset;
+          cloned.bounds.y += offset;
+        }
         if (!view.pageData.strokes) view.pageData.strokes = [];
         view.pageData.strokes.push(cloned);
         newStrokes.push(cloned);
