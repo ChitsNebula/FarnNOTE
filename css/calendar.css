@@ -1370,3 +1370,44 @@
     padding: 12px;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   11. SWIPE SLIDE ANIMATIONS
+   ────────────────────────────────────────────────────────────────────────── */
+@keyframes calSlideInLeft {
+  0% {
+    transform: translateX(45px);
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes calSlideInRight {
+  0% {
+    transform: translateX(-45px);
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.slide-left {
+  animation: calSlideInLeft 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.slide-right {
+  animation: calSlideInRight 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cal-month-card,
+.cal-agenda-container {
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+

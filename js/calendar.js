@@ -242,6 +242,7 @@
 
       this.bindHeaderEvents();
       this.bindTabEvents();
+      this.bindSwipeGestures();
       this.updateBadgeCounts();
     }
 
@@ -1084,9 +1085,99 @@
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // SWIPE GESTURES FOR CHANGING MONTH (TOUCH / TRACKPAD / MOUSE)
+    // ──────────────────────────────────────────────────────────────────────────
+    bindSwipeGestures() {
+      const container = document.getElementById('cal-view-container');
+      if (!container) return;
+
+      let startX = 0;
+      let startY = 0;
+      let startTime = 0;
+      let isSwiping = false;
+
+      // 1. Touch Events (Mobile, iPad, Chromebook, Touchscreen)
+      container.addEventListener('touchstart', (e) => {
+        if (this.activeTab !== 'calendar') return;
+        if (e.target.closest('button, input, select, textarea, .cal-modal-backdrop')) return;
+        const touch = e.touches[0];
+        startX = touch.clientX;
+        startY = touch.clientY;
+        startTime = Date.now();
+        isSwiping = true;
+      }, { passive: true });
+
+      container.addEventListener('touchend', (e) => {
+        if (!isSwiping || this.activeTab !== 'calendar') return;
+        isSwiping = false;
+
+        const touch = e.changedTouches[0];
+        const deltaX = touch.clientX - startX;
+        const deltaY = touch.clientY - startY;
+        const elapsedTime = Date.now() - startTime;
+
+        // Minimum swipe distance 35px, horizontal priority, within 800ms
+        if (Math.abs(deltaX) > 35 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2 && elapsedTime < 800) {
+          if (deltaX < 0) {
+            // Swipe Left -> Next Month
+            this.navigatePeriod(1, 'slide-left');
+          } else {
+            // Swipe Right -> Prev Month
+            this.navigatePeriod(-1, 'slide-right');
+          }
+        }
+      }, { passive: true });
+
+      // 2. Mouse Drag Swipe (Click & Drag in calendar area)
+      let mouseStartX = 0;
+      let mouseStartY = 0;
+      let isMouseDown = false;
+
+      container.addEventListener('mousedown', (e) => {
+        if (this.activeTab !== 'calendar') return;
+        if (e.button !== 0) return;
+        if (e.target.closest('button, input, select, textarea, .cal-event-pill, .cal-modal-backdrop')) return;
+        mouseStartX = e.clientX;
+        mouseStartY = e.clientY;
+        isMouseDown = true;
+      });
+
+      window.addEventListener('mouseup', (e) => {
+        if (!isMouseDown) return;
+        isMouseDown = false;
+        const deltaX = e.clientX - mouseStartX;
+        const deltaY = e.clientY - mouseStartY;
+
+        if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.3) {
+          if (deltaX < 0) {
+            this.navigatePeriod(1, 'slide-left');
+          } else {
+            this.navigatePeriod(-1, 'slide-right');
+          }
+        }
+      });
+
+      // 3. Trackpad 2-Finger Horizontal Scroll
+      let wheelDebounce = null;
+      container.addEventListener('wheel', (e) => {
+        if (this.activeTab !== 'calendar') return;
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.3 && Math.abs(e.deltaX) > 30) {
+          if (wheelDebounce) return;
+          wheelDebounce = setTimeout(() => { wheelDebounce = null; }, 400);
+
+          if (e.deltaX > 0) {
+            this.navigatePeriod(1, 'slide-left');
+          } else {
+            this.navigatePeriod(-1, 'slide-right');
+          }
+        }
+      }, { passive: true });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // NAVIGATION HELPER
     // ──────────────────────────────────────────────────────────────────────────
-    navigatePeriod(direction) {
+    navigatePeriod(direction, animationClass = null) {
       if (this.currentView === 'month') {
         this.currentDate.setMonth(this.currentDate.getMonth() + direction);
       } else if (this.currentView === 'week') {
@@ -1094,7 +1185,18 @@
       } else if (this.currentView === 'day') {
         this.currentDate.setDate(this.currentDate.getDate() + direction);
       }
+
       this.render();
+
+      if (animationClass) {
+        const target = document.querySelector('.cal-month-card') || document.querySelector('.cal-agenda-container');
+        if (target) {
+          target.classList.add(animationClass);
+          setTimeout(() => {
+            target.classList.remove(animationClass);
+          }, 280);
+        }
+      }
     }
 
     getPeriodLabel() {
