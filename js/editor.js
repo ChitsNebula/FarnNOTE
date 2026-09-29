@@ -1094,6 +1094,12 @@ window.EditorController = class EditorController {
       addPageHandler();
     });
 
+    document.getElementById('btn-overview-realign-notes')?.addEventListener('click', () => {
+      this.openRealignNotesModal();
+    });
+
+    this.initRealignNotesModalEvents();
+
     const modalOverview = document.getElementById('modal-page-overview');
     modalOverview.addEventListener('click', (e) => {
       if (e.target === modalOverview) {
@@ -2291,6 +2297,7 @@ window.EditorController = class EditorController {
     menu.innerHTML = `
       <button class="page-dropdown-item" data-action="add"><i class="fa-solid fa-plus" style="color:var(--gn-orange)"></i> แทรกหน้าต่อจากนี้</button>
       <button class="page-dropdown-item" data-action="duplicate"><i class="fa-solid fa-copy"></i> คัดลอกหน้านี้</button>
+      <button class="page-dropdown-item" data-action="realign"><i class="fa-solid fa-arrows-left-right-to-line" style="color:#3E6AE1"></i> ย้าย/จัดตำแหน่งลายมือ...</button>
       <button class="page-dropdown-item danger" data-action="delete"><i class="fa-solid fa-trash-can"></i> ลบหน้านี้</button>
     `;
 
@@ -2313,6 +2320,8 @@ window.EditorController = class EditorController {
           await this.insertPageAfter(pageIndex);
         } else if (action === 'duplicate') {
           await this.duplicatePage(pageIndex);
+        } else if (action === 'realign') {
+          this.openRealignNotesModal(pageIndex);
         } else if (action === 'delete') {
           await this.deletePageAtIndex(pageIndex);
         }
@@ -2490,6 +2499,454 @@ window.EditorController = class EditorController {
 
     if (window.CustomDialog && window.CustomDialog.toast) {
       window.CustomDialog.toast(`ลบหน้า ${pageIndex + 1} เรียบร้อย`);
+    }
+  }
+
+  // ── Realign / Shift Notes Feature ───────────────────────────────────────────
+  initRealignNotesModalEvents() {
+    const modal = document.getElementById('modal-realign-notes');
+    if (!modal) return;
+
+    // Close buttons & backdrop click
+    document.getElementById('btn-close-realign-notes')?.addEventListener('click', () => {
+      this.closeRealignNotesModal();
+    });
+    document.getElementById('btn-cancel-realign')?.addEventListener('click', () => {
+      this.closeRealignNotesModal();
+    });
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) this.closeRealignNotesModal();
+    });
+
+    // Tab switching
+    const tabBtnShift = document.getElementById('tab-btn-shift-range');
+    const tabBtnSwap = document.getElementById('tab-btn-swap-single');
+    const tabShiftContent = document.getElementById('realign-tab-shift-range');
+    const tabSwapContent = document.getElementById('realign-tab-swap-single');
+
+    tabBtnShift?.addEventListener('click', () => {
+      tabBtnShift.classList.add('active');
+      tabBtnSwap?.classList.remove('active');
+      tabShiftContent?.classList.remove('hidden');
+      tabShiftContent?.classList.add('active');
+      tabSwapContent?.classList.add('hidden');
+      tabSwapContent?.classList.remove('active');
+      this.updateRealignPreview();
+    });
+
+    tabBtnSwap?.addEventListener('click', () => {
+      tabBtnSwap.classList.add('active');
+      tabBtnShift?.classList.remove('active');
+      tabSwapContent?.classList.remove('hidden');
+      tabSwapContent?.classList.add('active');
+      tabShiftContent?.classList.add('hidden');
+      tabShiftContent?.classList.remove('active');
+      this.updateRealignPreview();
+    });
+
+    // Quick direction buttons (-1 / +1)
+    const btnDirBack = document.getElementById('btn-realign-dir-back');
+    const btnDirFwd = document.getElementById('btn-realign-dir-fwd');
+    const inputCustom = document.getElementById('realign-delta-custom');
+
+    btnDirBack?.addEventListener('click', () => {
+      btnDirBack.classList.add('active');
+      btnDirFwd?.classList.remove('active');
+      if (inputCustom) inputCustom.value = '-1';
+      this.updateRealignPreview();
+    });
+
+    btnDirFwd?.addEventListener('click', () => {
+      btnDirFwd.classList.add('active');
+      btnDirBack?.classList.remove('active');
+      if (inputCustom) inputCustom.value = '1';
+      this.updateRealignPreview();
+    });
+
+    inputCustom?.addEventListener('input', () => {
+      const val = parseInt(inputCustom.value, 10);
+      if (val === -1) {
+        btnDirBack?.classList.add('active');
+        btnDirFwd?.classList.remove('active');
+      } else if (val === 1) {
+        btnDirFwd?.classList.add('active');
+        btnDirBack?.classList.remove('active');
+      } else {
+        btnDirBack?.classList.remove('active');
+        btnDirFwd?.classList.remove('active');
+      }
+      this.updateRealignPreview();
+    });
+
+    // Inputs change listeners for preview
+    document.getElementById('realign-from-page')?.addEventListener('change', () => this.updateRealignPreview());
+    document.getElementById('realign-swap-from')?.addEventListener('change', () => this.updateRealignSwapBadges());
+    document.getElementById('realign-swap-to')?.addEventListener('change', () => this.updateRealignSwapBadges());
+
+    // Execute button
+    document.getElementById('btn-execute-realign')?.addEventListener('click', async () => {
+      await this.handleExecuteRealign();
+    });
+
+    // Undo button
+    document.getElementById('btn-realign-undo')?.addEventListener('click', async () => {
+      await this.undoNotesShift();
+    });
+  }
+
+  openRealignNotesModal(preferredSourceIndex) {
+    const modal = document.getElementById('modal-realign-notes');
+    if (!modal) return;
+
+    this.populateRealignModalSelectors(preferredSourceIndex);
+
+    // If preferredSourceIndex was specified from single page context menu, open Tab 2 (Swap/Move)
+    if (preferredSourceIndex !== undefined && preferredSourceIndex >= 0) {
+      document.getElementById('tab-btn-swap-single')?.click();
+    } else {
+      document.getElementById('tab-btn-shift-range')?.click();
+    }
+
+    const btnUndo = document.getElementById('btn-realign-undo');
+    if (btnUndo) {
+      btnUndo.classList.toggle('hidden', !(this._notesUndoStack && this._notesUndoStack.length > 0));
+    }
+
+    modal.classList.remove('hidden');
+  }
+
+  closeRealignNotesModal() {
+    const modal = document.getElementById('modal-realign-notes');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  _getPageNotesSummary(page, idx) {
+    if (!page) return `หน้า ${idx + 1} (ว่าง)`;
+    const sCount = (page.strokes && page.strokes.length) || 0;
+    const tCount = (page.textBoxes && page.textBoxes.length) || 0;
+    const iCount = (page.images && page.images.length) || 0;
+    const parts = [];
+    if (sCount > 0) parts.push(`${sCount} เส้น`);
+    if (tCount > 0) parts.push(`${tCount} ข้อความ`);
+    if (iCount > 0) parts.push(`${iCount} รูป`);
+    const details = parts.length > 0 ? parts.join(', ') : 'ว่าง';
+    return `หน้า ${idx + 1} (${details})`;
+  }
+
+  populateRealignModalSelectors(preferredIndex) {
+    const selFrom = document.getElementById('realign-from-page');
+    const selSwapFrom = document.getElementById('realign-swap-from');
+    const selSwapTo = document.getElementById('realign-swap-to');
+
+    if (!selFrom || !selSwapFrom || !selSwapTo) return;
+
+    selFrom.innerHTML = '';
+    selSwapFrom.innerHTML = '';
+    selSwapTo.innerHTML = '';
+
+    const defaultIdx = (preferredIndex !== undefined && preferredIndex >= 0 && preferredIndex < this.pages.length)
+      ? preferredIndex
+      : (this.currentPageIndex || 0);
+
+    this.pages.forEach((page, idx) => {
+      const text = this._getPageNotesSummary(page, idx);
+      
+      const opt1 = new Option(text, idx);
+      const opt2 = new Option(text, idx);
+      const opt3 = new Option(text, idx);
+
+      selFrom.appendChild(opt1);
+      selSwapFrom.appendChild(opt2);
+      selSwapTo.appendChild(opt3);
+    });
+
+    selFrom.value = defaultIdx;
+    selSwapFrom.value = defaultIdx;
+    const nextIdx = (defaultIdx + 1 < this.pages.length) ? (defaultIdx + 1) : Math.max(0, defaultIdx - 1);
+    selSwapTo.value = nextIdx;
+
+    this.updateRealignSwapBadges();
+    this.updateRealignPreview();
+  }
+
+  updateRealignSwapBadges() {
+    const selSwapFrom = document.getElementById('realign-swap-from');
+    const selSwapTo = document.getElementById('realign-swap-to');
+    const badgeFrom = document.getElementById('realign-swap-from-badge');
+    const badgeTo = document.getElementById('realign-swap-to-badge');
+
+    if (selSwapFrom && badgeFrom) {
+      const idx = parseInt(selSwapFrom.value, 10);
+      badgeFrom.textContent = this._getPageNotesSummary(this.pages[idx], idx);
+    }
+    if (selSwapTo && badgeTo) {
+      const idx = parseInt(selSwapTo.value, 10);
+      badgeTo.textContent = this._getPageNotesSummary(this.pages[idx], idx);
+    }
+  }
+
+  updateRealignPreview() {
+    const selFrom = document.getElementById('realign-from-page');
+    const inputCustom = document.getElementById('realign-delta-custom');
+    const previewEl = document.getElementById('realign-range-preview-text');
+    if (!selFrom || !inputCustom || !previewEl) return;
+
+    const fromIdx = parseInt(selFrom.value, 10) || 0;
+    const delta = parseInt(inputCustom.value, 10) || 0;
+
+    if (delta === 0) {
+      previewEl.textContent = 'ไม่มีการเลื่อน (ระบุจำนวนหน้ามากกว่า 0 หรือติดลบ)';
+      return;
+    }
+
+    const fromPageNum = fromIdx + 1;
+    const toPageNum = fromPageNum + delta;
+
+    if (delta > 0) {
+      previewEl.textContent = `โน้ตหน้า ${fromPageNum} จะเลื่อนไปหน้า ${toPageNum}, หน้า ${fromPageNum + 1} ไปหน้า ${toPageNum + 1} ... (หน้า ${fromPageNum} จะเป็นหน้าว่าง)`;
+    } else {
+      if (toPageNum < 1) {
+        previewEl.textContent = `ระวัง: โน้ตหน้า ${fromPageNum} จะเลื่อนถอยเกินหน้าแรก (หน้า 1)!`;
+      } else {
+        previewEl.textContent = `โน้ตหน้า ${fromPageNum} จะถอยกลับมาหน้า ${toPageNum}, หน้า ${fromPageNum + 1} มาหน้า ${toPageNum + 1} ...`;
+      }
+    }
+  }
+
+  async handleExecuteRealign() {
+    const tabShift = document.getElementById('tab-btn-shift-range');
+    const isShiftTab = tabShift && tabShift.classList.contains('active');
+
+    if (isShiftTab) {
+      const fromIdx = parseInt(document.getElementById('realign-from-page').value, 10);
+      const delta = parseInt(document.getElementById('realign-delta-custom').value, 10);
+      const autoAdd = document.getElementById('realign-auto-add-page')?.checked ?? true;
+
+      if (isNaN(delta) || delta === 0) {
+        if (window.CustomDialog && window.CustomDialog.toast) {
+          window.CustomDialog.toast('กรุณาระบุจำนวนหน้าที่ต้องการเลื่อน');
+        } else {
+          alert('กรุณาระบุจำนวนหน้าที่ต้องการเลื่อน');
+        }
+        return;
+      }
+
+      await this.executeShiftNotesRange(fromIdx, delta, autoAdd);
+    } else {
+      const srcIdx = parseInt(document.getElementById('realign-swap-from').value, 10);
+      const tgtIdx = parseInt(document.getElementById('realign-swap-to').value, 10);
+      const actionType = document.querySelector('input[name="realign-swap-action"]:checked')?.value || 'swap';
+
+      await this.executeSwapNotes(srcIdx, tgtIdx, actionType);
+    }
+  }
+
+  async executeShiftNotesRange(fromIndex, delta, autoAdd = true) {
+    if (delta === 0) return;
+    if (fromIndex < 0 || fromIndex >= this.pages.length) return;
+
+    // Snapshot for Undo
+    this._notesUndoStack = this._notesUndoStack || [];
+    this._notesUndoStack.push(this.pages.map(p => ({
+      id: p.id,
+      strokes: JSON.parse(JSON.stringify(p.strokes || [])),
+      textBoxes: JSON.parse(JSON.stringify(p.textBoxes || [])),
+      images: JSON.parse(JSON.stringify(p.images || []))
+    })));
+
+    // Deep clone original notes
+    const originalNotes = this.pages.map(p => ({
+      strokes: JSON.parse(JSON.stringify(p.strokes || [])),
+      textBoxes: JSON.parse(JSON.stringify(p.textBoxes || [])),
+      images: JSON.parse(JSON.stringify(p.images || []))
+    }));
+
+    // If delta > 0 and autoAdd, expand pages if notes would spill over the end
+    if (delta > 0 && autoAdd) {
+      let lastNonEmpty = -1;
+      for (let i = this.pages.length - 1; i >= fromIndex; i--) {
+        const p = this.pages[i];
+        if ((p.strokes?.length || 0) > 0 || (p.textBoxes?.length || 0) > 0 || (p.images?.length || 0) > 0) {
+          lastNonEmpty = i;
+          break;
+        }
+      }
+
+      if (lastNonEmpty >= 0 && lastNonEmpty + delta >= this.pages.length) {
+        const targetLen = lastNonEmpty + delta + 1;
+        while (this.pages.length < targetLen) {
+          const lastPage = this.pages[this.pages.length - 1];
+          const newPage = {
+            id: `page-${this.currentNotebook.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            notebookId: this.currentNotebook.id,
+            index: this.pages.length,
+            width: lastPage ? (lastPage.width || 794) : 794,
+            height: lastPage ? (lastPage.height || 1123) : 1123,
+            template: 'blank',
+            pdfAssetId: null,
+            pdfPageNum: null,
+            strokes: [],
+            textBoxes: [],
+            images: []
+          };
+          this.pages.push(newPage);
+          originalNotes.push({ strokes: [], textBoxes: [], images: [] });
+          await window.Storage.savePage(newPage);
+        }
+        if (this.currentNotebook) {
+          this.currentNotebook.pageCount = this.pages.length;
+          await window.Storage.saveNotebook(this.currentNotebook);
+        }
+      }
+    }
+
+    // Shift notes across affected pages
+    const minAffected = Math.max(0, Math.min(fromIndex, fromIndex + delta));
+    const maxAffected = this.pages.length - 1;
+
+    for (let i = minAffected; i <= maxAffected; i++) {
+      const srcIdx = i - delta;
+      if (srcIdx >= fromIndex && srcIdx < originalNotes.length) {
+        this.pages[i].strokes = originalNotes[srcIdx].strokes;
+        this.pages[i].textBoxes = originalNotes[srcIdx].textBoxes;
+        this.pages[i].images = originalNotes[srcIdx].images;
+      } else if (i >= fromIndex) {
+        this.pages[i].strokes = [];
+        this.pages[i].textBoxes = [];
+        this.pages[i].images = [];
+      }
+    }
+
+    // Persist all affected pages
+    for (let i = 0; i < this.pages.length; i++) {
+      this.pages[i].index = i;
+      await window.Storage.savePage(this.pages[i]);
+    }
+
+    // Reload canvas engine and thumbnails
+    await this.canvasEngine.loadPages(this.pages, window.Storage, this.currentPageIndex);
+    this.renderThumbnails();
+    this.updatePageCounter();
+    this.renderPageOverviewGrid();
+    this.autoSave();
+
+    this.closeRealignNotesModal();
+
+    const dirText = delta > 0 ? `เดินหน้า +${delta}` : `ถอยหลัง ${delta}`;
+    if (window.CustomDialog && window.CustomDialog.toast) {
+      window.CustomDialog.toast(`จัดตำแหน่งลายมือสำเร็จ! (เลื่อน${dirText} หน้า) มีปุ่ม Undo ในเครื่องมือ`, 3500);
+    }
+  }
+
+  async executeSwapNotes(sourceIndex, targetIndex, actionType = 'swap') {
+    if (sourceIndex === targetIndex) {
+      if (window.CustomDialog && window.CustomDialog.toast) {
+        window.CustomDialog.toast('หน้าต้นทางและปลายทางต้องเป็นคนละหน้ากัน');
+      } else {
+        alert('หน้าต้นทางและปลายทางต้องเป็นคนละหน้ากัน');
+      }
+      return;
+    }
+    const srcPage = this.pages[sourceIndex];
+    const tgtPage = this.pages[targetIndex];
+    if (!srcPage || !tgtPage) return;
+
+    // Snapshot for Undo
+    this._notesUndoStack = this._notesUndoStack || [];
+    this._notesUndoStack.push(this.pages.map(p => ({
+      id: p.id,
+      strokes: JSON.parse(JSON.stringify(p.strokes || [])),
+      textBoxes: JSON.parse(JSON.stringify(p.textBoxes || [])),
+      images: JSON.parse(JSON.stringify(p.images || []))
+    })));
+
+    const srcStrokes = JSON.parse(JSON.stringify(srcPage.strokes || []));
+    const srcText = JSON.parse(JSON.stringify(srcPage.textBoxes || []));
+    const srcImages = JSON.parse(JSON.stringify(srcPage.images || []));
+
+    const tgtStrokes = JSON.parse(JSON.stringify(tgtPage.strokes || []));
+    const tgtText = JSON.parse(JSON.stringify(tgtPage.textBoxes || []));
+    const tgtImages = JSON.parse(JSON.stringify(tgtPage.images || []));
+
+    if (actionType === 'swap') {
+      tgtPage.strokes = srcStrokes;
+      tgtPage.textBoxes = srcText;
+      tgtPage.images = srcImages;
+
+      srcPage.strokes = tgtStrokes;
+      srcPage.textBoxes = tgtText;
+      srcPage.images = tgtImages;
+    } else if (actionType === 'move') {
+      tgtPage.strokes = srcStrokes;
+      tgtPage.textBoxes = srcText;
+      tgtPage.images = srcImages;
+
+      srcPage.strokes = [];
+      srcPage.textBoxes = [];
+      srcPage.images = [];
+    } else if (actionType === 'merge') {
+      tgtPage.strokes = tgtStrokes.concat(srcStrokes);
+      tgtPage.textBoxes = tgtText.concat(srcText);
+      tgtPage.images = tgtImages.concat(srcImages);
+
+      srcPage.strokes = [];
+      srcPage.textBoxes = [];
+      srcPage.images = [];
+    }
+
+    await window.Storage.savePage(srcPage);
+    await window.Storage.savePage(tgtPage);
+
+    await this.canvasEngine.loadPages(this.pages, window.Storage, targetIndex);
+    this.renderThumbnails();
+    this.updatePageCounter();
+    this.renderPageOverviewGrid();
+    this.autoSave();
+
+    this.closeRealignNotesModal();
+
+    const actionText = actionType === 'swap' ? 'สลับลายมือ' : (actionType === 'merge' ? 'รวมลายมือ' : 'ย้ายลายมือ');
+    if (window.CustomDialog && window.CustomDialog.toast) {
+      window.CustomDialog.toast(`${actionText}ระหว่างหน้า ${sourceIndex + 1} กับหน้า ${targetIndex + 1} เรียบร้อย!`, 3200);
+    }
+  }
+
+  async undoNotesShift() {
+    if (!this._notesUndoStack || this._notesUndoStack.length === 0) {
+      if (window.CustomDialog && window.CustomDialog.toast) {
+        window.CustomDialog.toast('ไม่มีประวัติการย้ายลายมือให้ย้อนกลับ');
+      } else {
+        alert('ไม่มีประวัติการย้ายลายมือให้ย้อนกลับ');
+      }
+      return;
+    }
+
+    const backup = this._notesUndoStack.pop();
+    for (const saved of backup) {
+      const page = this.pages.find(p => p.id === saved.id);
+      if (page) {
+        page.strokes = saved.strokes;
+        page.textBoxes = saved.textBoxes;
+        page.images = saved.images;
+        await window.Storage.savePage(page);
+      }
+    }
+
+    await this.canvasEngine.loadPages(this.pages, window.Storage, this.currentPageIndex);
+    this.renderThumbnails();
+    this.updatePageCounter();
+    this.renderPageOverviewGrid();
+    this.autoSave();
+
+    this.populateRealignModalSelectors();
+
+    const btnUndo = document.getElementById('btn-realign-undo');
+    if (btnUndo) {
+      btnUndo.classList.toggle('hidden', this._notesUndoStack.length === 0);
+    }
+
+    if (window.CustomDialog && window.CustomDialog.toast) {
+      window.CustomDialog.toast('ย้อนกลับการจัดตำแหน่งลายมือเรียบร้อยแล้ว!', 2500);
     }
   }
 

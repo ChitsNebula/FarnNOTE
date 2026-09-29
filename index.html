@@ -18,11 +18,11 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- App Stylesheets -->
-  <link rel="stylesheet" href="css/reset.css?v=2.14.6">
-  <link rel="stylesheet" href="css/theme.css?v=2.14.6">
-  <link rel="stylesheet" href="css/library.css?v=2.14.6">
-  <link rel="stylesheet" href="css/editor.css?v=2.14.6">
-  <link rel="stylesheet" href="css/calendar.css?v=2.14.6">
+  <link rel="stylesheet" href="css/reset.css?v=2.14.7">
+  <link rel="stylesheet" href="css/theme.css?v=2.14.7">
+  <link rel="stylesheet" href="css/library.css?v=2.14.7">
+  <link rel="stylesheet" href="css/editor.css?v=2.14.7">
+  <link rel="stylesheet" href="css/calendar.css?v=2.14.7">
 
   <!-- External Libraries: Google Identity Services, PDF.js & pdf-lib -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -32,7 +32,7 @@
   <!-- Auto-Purge Cache & Service Worker on Version Bump (Fixes Chromebook 403 & stale code) -->
   <script>
     (function() {
-      const APP_VER = '2.14.6';
+      const APP_VER = '2.14.7';
       if (localStorage.getItem('farmnotes_app_version') !== APP_VER) {
         localStorage.setItem('farmnotes_app_version', APP_VER);
         if ('caches' in window) {
@@ -577,6 +577,9 @@
         <div class="modal-header">
           <h3><i class="fa-solid fa-layer-group" style="color:var(--gn-orange); margin-right:8px;"></i> หน้าย่อยทั้งหมด (PAGE OVERVIEW)</h3>
           <div class="header-action-group">
+            <button class="btn-realign-header-sm" id="btn-overview-realign-notes" title="แก้ปัญหาลายมือเลื่อนหน้า/ไม่ตรงกับ PDF จากการแทรกหรือลบหน้า">
+              <i class="fa-solid fa-arrows-left-right-to-line" style="color:#3E6AE1;"></i> จัดตำแหน่งลายมือ
+            </button>
             <button class="btn-primary-sm" id="btn-overview-add-page">
               <i class="fa-solid fa-plus"></i> เพิ่มหน้าใหม่
             </button>
@@ -585,6 +588,114 @@
         </div>
         <div class="modal-body page-overview-grid-container">
           <div class="page-overview-grid" id="page-overview-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4.1 Realign / Shift Notes Modal -->
+    <div id="modal-realign-notes" class="modal-backdrop hidden" style="z-index: 100060;">
+      <div class="modal-card realign-notes-modal-card">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-arrows-left-right-to-line" style="color:#3E6AE1; margin-right:8px;"></i> จัดตำแหน่งลายมือ / ย้ายโน้ต (REALIGN NOTES)</h3>
+          <button class="btn-icon-sm close-modal" id="btn-close-realign-notes"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body realign-notes-modal-body">
+          <div class="realign-intro-banner">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>ใช้เครื่องมือนี้เมื่อลายมือเลื่อนไม่ตรงหน้า จากการแทรกหรือลบหน้า PDF สามารถเลื่อนโน้ตทั้งหมดพร้อมกัน หรือย้าย/สลับเฉพาะหน้าได้ทันที พร้อมระบบย้อนกลับ (Undo) ปลอดภัย 100%</span>
+          </div>
+
+          <!-- Mode Tabs -->
+          <div class="realign-tabs">
+            <button type="button" class="realign-tab-btn active" id="tab-btn-shift-range" data-tab="shift-range">
+              <i class="fa-solid fa-layer-group"></i> เลื่อนโน้ตเป็นช่วง (Shift Range)
+            </button>
+            <button type="button" class="realign-tab-btn" id="tab-btn-swap-single" data-tab="swap-single">
+              <i class="fa-solid fa-arrows-rotate"></i> ย้าย / สลับเฉพาะหน้า (Move / Swap)
+            </button>
+          </div>
+
+          <!-- Tab Content 1: Shift Range -->
+          <div class="realign-tab-content active" id="realign-tab-shift-range">
+            <div class="realign-form-row">
+              <label for="realign-from-page">เริ่มตั้งแต่หน้า:</label>
+              <select id="realign-from-page" class="realign-select"></select>
+            </div>
+            
+            <div class="realign-form-row">
+              <label>ทิศทางด่วน:</label>
+              <div class="realign-quick-actions">
+                <button type="button" class="btn-realign-dir" id="btn-realign-dir-back" data-delta="-1">
+                  <i class="fa-solid fa-arrow-left"></i> ถอยหลัง 1 หน้า (-1)
+                </button>
+                <button type="button" class="btn-realign-dir active" id="btn-realign-dir-fwd" data-delta="1">
+                  <i class="fa-solid fa-arrow-right"></i> เดินหน้า 1 หน้า (+1)
+                </button>
+              </div>
+            </div>
+
+            <div class="realign-form-row inline-row">
+              <label for="realign-delta-custom">หรือระบุจำนวนหน้า (บวก=เดินหน้า, ลบ=ถอยหลัง):</label>
+              <input type="number" id="realign-delta-custom" class="realign-input-number" value="1" step="1">
+            </div>
+
+            <div class="realign-preview-box" id="realign-range-preview">
+              <i class="fa-solid fa-wand-magic-sparkles" style="color:#3E6AE1;"></i>
+              <span id="realign-range-preview-text">ตัวอย่าง: โน้ตหน้า 2 จะย้ายไปหน้า 3, หน้า 3 ไปหน้า 4...</span>
+            </div>
+
+            <div class="realign-form-check">
+              <label>
+                <input type="checkbox" id="realign-auto-add-page" checked>
+                <span>เพิ่มหน้าว่างให้อัตโนมัติหากเลื่อนเกินหน้าสุดท้าย (ป้องกันลายมือหาย)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Tab Content 2: Move / Swap Single Page -->
+          <div class="realign-tab-content hidden" id="realign-tab-swap-single">
+            <div class="realign-form-grid">
+              <div class="realign-col">
+                <label for="realign-swap-from">หน้าต้นทาง (Source):</label>
+                <select id="realign-swap-from" class="realign-select"></select>
+                <div class="realign-page-badge" id="realign-swap-from-badge">-</div>
+              </div>
+              <div class="realign-col-center">
+                <i class="fa-solid fa-arrow-right-arrow-left realign-swap-icon"></i>
+              </div>
+              <div class="realign-col">
+                <label for="realign-swap-to">หน้าปลายทาง (Target):</label>
+                <select id="realign-swap-to" class="realign-select"></select>
+                <div class="realign-page-badge" id="realign-swap-to-badge">-</div>
+              </div>
+            </div>
+
+            <div class="realign-action-type-group">
+              <label class="realign-radio-label">
+                <input type="radio" name="realign-swap-action" value="swap" checked>
+                <span><strong>สลับลายมือ (Swap)</strong>: สลับโน้ตระหว่าง 2 หน้านี้</span>
+              </label>
+              <label class="realign-radio-label">
+                <input type="radio" name="realign-swap-action" value="move">
+                <span><strong>ย้ายทับ (Overwrite)</strong>: ย้ายโน้ตต้นทางไปทับปลายทาง (ลายมือเดิมที่ปลายทางจะถูกลบ)</span>
+              </label>
+              <label class="realign-radio-label">
+                <input type="radio" name="realign-swap-action" value="merge">
+                <span><strong>รวมลายมือ (Merge)</strong>: นำโน้ตต้นทางไปรวมเข้ากับลายมือหน้าปลายทาง</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer realign-notes-modal-footer">
+          <button type="button" class="btn-realign-undo hidden" id="btn-realign-undo" title="ย้อนกลับการปรับตำแหน่งล่าสุด">
+            <i class="fa-solid fa-rotate-left"></i> ย้อนกลับล่าสุด (Undo)
+          </button>
+          <div style="flex:1;"></div>
+          <button type="button" class="btn-secondary" id="btn-cancel-realign">ยกเลิก</button>
+          <button type="button" class="btn-primary" id="btn-execute-realign">
+            <i class="fa-solid fa-check"></i> ดำเนินการทันที
+          </button>
         </div>
       </div>
     </div>
@@ -1164,15 +1275,15 @@
 
   <!-- Standard Application Scripts (No module / Works on file:// protocol!) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="js/tools.js?v=2.14.6"></script>
-  <script src="js/storage.js?v=2.14.6"></script>
-  <script src="js/canvas.js?v=2.14.6"></script>
-  <script src="js/pdf.js?v=2.14.6"></script>
-  <script src="js/classroom.js?v=2.14.6"></script>
-  <script src="js/calendar.js?v=2.14.6"></script>
-  <script src="js/library.js?v=2.14.6"></script>
-  <script src="js/editor.js?v=2.14.6"></script>
-  <script src="js/app.js?v=2.14.6"></script>
+  <script src="js/tools.js?v=2.14.7"></script>
+  <script src="js/storage.js?v=2.14.7"></script>
+  <script src="js/canvas.js?v=2.14.7"></script>
+  <script src="js/pdf.js?v=2.14.7"></script>
+  <script src="js/classroom.js?v=2.14.7"></script>
+  <script src="js/calendar.js?v=2.14.7"></script>
+  <script src="js/library.js?v=2.14.7"></script>
+  <script src="js/editor.js?v=2.14.7"></script>
+  <script src="js/app.js?v=2.14.7"></script>
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
       window.addEventListener('load', () => {
