@@ -993,6 +993,7 @@
       // Click on day cell in month view -> open quick add with prefilled date
       document.querySelectorAll('.cal-day-cell').forEach(cell => {
         cell.addEventListener('click', (e) => {
+          if (this._justSwiped) return;
           if (e.target.closest('.cal-event-pill')) return; // handled separately
           const date = cell.dataset.date;
           if (date) this.openQuickAddModal(date);
@@ -1002,6 +1003,7 @@
       // Click on event pill
       document.querySelectorAll('.cal-event-pill').forEach(pill => {
         pill.addEventListener('click', (e) => {
+          if (this._justSwiped) return;
           e.stopPropagation();
           const id = pill.dataset.eventId;
           if (id) this.openEventDetailModal(id);
@@ -1085,76 +1087,218 @@
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // SWIPE GESTURES FOR CHANGING MONTH (TOUCH / TRACKPAD / MOUSE)
+    // SWIPE GESTURES FOR CHANGING MONTH (TOUCH / TRACKPAD / MOUSE REAL-TIME FOLLOW)
     // ──────────────────────────────────────────────────────────────────────────
     bindSwipeGestures() {
       const container = document.getElementById('cal-view-container');
       if (!container) return;
 
+      const getTargetCard = () => {
+        return container.querySelector('.cal-month-card, .cal-agenda-container');
+      };
+
       let startX = 0;
       let startY = 0;
       let startTime = 0;
+      let isTracking = false;
       let isSwiping = false;
+      let activeCard = null;
+
+      const resetCard = (card, animated = true) => {
+        if (!card) return;
+        if (animated) {
+          card.style.transition = 'transform 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.15), opacity 0.28s ease';
+        } else {
+          card.style.transition = 'none';
+        }
+        card.style.transform = 'translate3d(0, 0, 0)';
+        card.style.opacity = '1';
+      };
 
       // 1. Touch Events (Mobile, iPad, Chromebook, Touchscreen)
       container.addEventListener('touchstart', (e) => {
         if (this.activeTab !== 'calendar') return;
         if (e.target.closest('button, input, select, textarea, .cal-modal-backdrop')) return;
+
         const touch = e.touches[0];
         startX = touch.clientX;
         startY = touch.clientY;
         startTime = Date.now();
-        isSwiping = true;
+        isTracking = true;
+        isSwiping = false;
+        activeCard = getTargetCard();
+        if (activeCard) {
+          activeCard.style.transition = 'none';
+        }
       }, { passive: true });
 
-      container.addEventListener('touchend', (e) => {
-        if (!isSwiping || this.activeTab !== 'calendar') return;
-        isSwiping = false;
+      container.addEventListener('touchmove', (e) => {
+        if (!isTracking || this.activeTab !== 'calendar' || !activeCard) return;
 
+        const touch = e.touches[0];
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+
+        // Determine horizontal swipe intent
+        if (!isSwiping) {
+          if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+            isSwiping = true;
+          } else if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
+            isTracking = false;
+            resetCard(activeCard, false);
+            return;
+          }
+        }
+
+        if (isSwiping) {
+          if (e.cancelable) e.preventDefault();
+          // Interactive follow with smooth elastic damping
+          const damping = Math.sign(dx) * Math.min(Math.abs(dx) * 0.55, 170);
+          const opacity = Math.max(0.65, 1 - (Math.abs(dx) / 750));
+          activeCard.style.transform = `translate3d(${damping}px, 0, 0)`;
+          activeCard.style.opacity = opacity;
+        }
+      }, { passive: false });
+
+      const finishSwipe = (deltaX, deltaY, elapsedTime) => {
+        if (!activeCard) return;
+        const cardToAnimate = activeCard;
+        activeCard = null;
+
+        const isQuickFling = Math.abs(deltaX) > 38 && elapsedTime < 320;
+        const isFarDrag = Math.abs(deltaX) > 70;
+
+        if (isSwiping && (isQuickFling || isFarDrag)) {
+          this._justSwiped = true;
+          setTimeout(() => { this._justSwiped = false; }, 350);
+
+          const dir = deltaX < 0 ? 1 : -1; // swipe left = next month (+1), swipe right = prev month (-1)
+          const exitX = deltaX < 0 ? -160 : 160;
+
+          // Smooth exit slide
+          cardToAnimate.style.transition = 'transform 0.16s ease-out, opacity 0.16s ease-out';
+          cardToAnimate.style.transform = `translate3d(${exitX}px, 0, 0)`;
+          cardToAnimate.style.opacity = '0';
+
+          setTimeout(() => {
+            this.navigatePeriod(dir, dir === 1 ? 'slide-left' : 'slide-right');
+          }, 150);
+        } else {
+          if (isSwiping || Math.abs(deltaX) > 10) {
+            this._justSwiped = true;
+            setTimeout(() => { this._justSwiped = false; }, 220);
+          }
+          resetCard(cardToAnimate, true);
+        }
+
+        isTracking = false;
+        isSwiping = false;
+      };
+
+      container.addEventListener('touchend', (e) => {
+        if (!isTracking) return;
         const touch = e.changedTouches[0];
         const deltaX = touch.clientX - startX;
         const deltaY = touch.clientY - startY;
         const elapsedTime = Date.now() - startTime;
-
-        // Minimum swipe distance 35px, horizontal priority, within 800ms
-        if (Math.abs(deltaX) > 35 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2 && elapsedTime < 800) {
-          if (deltaX < 0) {
-            // Swipe Left -> Next Month
-            this.navigatePeriod(1, 'slide-left');
-          } else {
-            // Swipe Right -> Prev Month
-            this.navigatePeriod(-1, 'slide-right');
-          }
-        }
+        finishSwipe(deltaX, deltaY, elapsedTime);
       }, { passive: true });
 
-      // 2. Mouse Drag Swipe (Click & Drag in calendar area)
+      container.addEventListener('touchcancel', () => {
+        if (isTracking && activeCard) {
+          resetCard(activeCard, true);
+        }
+        isTracking = false;
+        isSwiping = false;
+        activeCard = null;
+      }, { passive: true });
+
+      // 2. Mouse Drag Swipe (Desktop / Trackpad Click & Drag)
       let mouseStartX = 0;
       let mouseStartY = 0;
-      let isMouseDown = false;
+      let mouseStartTime = 0;
+      let isMouseTracking = false;
+      let isMouseSwiping = false;
+      let mouseCard = null;
 
       container.addEventListener('mousedown', (e) => {
         if (this.activeTab !== 'calendar') return;
         if (e.button !== 0) return;
         if (e.target.closest('button, input, select, textarea, .cal-event-pill, .cal-modal-backdrop')) return;
+
         mouseStartX = e.clientX;
         mouseStartY = e.clientY;
-        isMouseDown = true;
+        mouseStartTime = Date.now();
+        isMouseTracking = true;
+        isMouseSwiping = false;
+        mouseCard = getTargetCard();
+        if (mouseCard) {
+          mouseCard.style.transition = 'none';
+        }
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isMouseTracking || this.activeTab !== 'calendar' || !mouseCard) return;
+
+        const dx = e.clientX - mouseStartX;
+        const dy = e.clientY - mouseStartY;
+
+        if (!isMouseSwiping) {
+          if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+            isMouseSwiping = true;
+          } else if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) {
+            isMouseTracking = false;
+            resetCard(mouseCard, false);
+            return;
+          }
+        }
+
+        if (isMouseSwiping) {
+          const damping = Math.sign(dx) * Math.min(Math.abs(dx) * 0.55, 170);
+          const opacity = Math.max(0.65, 1 - (Math.abs(dx) / 750));
+          mouseCard.style.transform = `translate3d(${damping}px, 0, 0)`;
+          mouseCard.style.opacity = opacity;
+        }
       });
 
       window.addEventListener('mouseup', (e) => {
-        if (!isMouseDown) return;
-        isMouseDown = false;
+        if (!isMouseTracking) return;
         const deltaX = e.clientX - mouseStartX;
         const deltaY = e.clientY - mouseStartY;
+        const elapsedTime = Date.now() - mouseStartTime;
 
-        if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.3) {
-          if (deltaX < 0) {
-            this.navigatePeriod(1, 'slide-left');
+        if (mouseCard) {
+          const cardToAnimate = mouseCard;
+          mouseCard = null;
+
+          const isQuickFling = Math.abs(deltaX) > 38 && elapsedTime < 350;
+          const isFarDrag = Math.abs(deltaX) > 70;
+
+          if (isMouseSwiping && (isQuickFling || isFarDrag)) {
+            this._justSwiped = true;
+            setTimeout(() => { this._justSwiped = false; }, 350);
+
+            const dir = deltaX < 0 ? 1 : -1;
+            const exitX = deltaX < 0 ? -160 : 160;
+
+            cardToAnimate.style.transition = 'transform 0.16s ease-out, opacity 0.16s ease-out';
+            cardToAnimate.style.transform = `translate3d(${exitX}px, 0, 0)`;
+            cardToAnimate.style.opacity = '0';
+
+            setTimeout(() => {
+              this.navigatePeriod(dir, dir === 1 ? 'slide-left' : 'slide-right');
+            }, 150);
           } else {
-            this.navigatePeriod(-1, 'slide-right');
+            if (isMouseSwiping || Math.abs(deltaX) > 10) {
+              this._justSwiped = true;
+              setTimeout(() => { this._justSwiped = false; }, 220);
+            }
+            resetCard(cardToAnimate, true);
           }
         }
+
+        isMouseTracking = false;
+        isMouseSwiping = false;
       });
 
       // 3. Trackpad 2-Finger Horizontal Scroll

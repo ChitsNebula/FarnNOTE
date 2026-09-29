@@ -1409,5 +1409,7 @@
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
 }
 
