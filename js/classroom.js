@@ -254,7 +254,9 @@
             'https://www.googleapis.com/auth/classroom.coursework.me.readonly',
             'https://www.googleapis.com/auth/drive.readonly',
             'https://www.googleapis.com/auth/userinfo.profile',
-            'https://www.googleapis.com/auth/userinfo.email'
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/calendar',
+            'https://www.googleapis.com/auth/calendar.events'
           ].join(' '),
           callback: (tokenResponse) => {
             if (tokenResponse.error) {
@@ -458,6 +460,9 @@
       localStorage.removeItem('farmnotes_google_user_profile');
       localStorage.removeItem('farmnotes_google_courses_cache');
       localStorage.removeItem('farmnotes_google_drive_cache');
+      window.dispatchEvent(new CustomEvent('farmnotes_google_auth_changed', { 
+        detail: { user: null, token: null } 
+      }));
       this.showToast('ออกจากระบบเรียบร้อยแล้ว', 2000);
       this.render();
     }
@@ -472,6 +477,9 @@
           this.currentUser = await res.json();
           localStorage.setItem('farmnotes_google_user_profile', JSON.stringify(this.currentUser));
           this.updateAccountBadge(this.currentUser);
+          window.dispatchEvent(new CustomEvent('farmnotes_google_auth_changed', { 
+            detail: { user: this.currentUser, token: this.accessToken } 
+          }));
         }
       } catch (e) {
         console.warn('Failed to fetch userinfo:', e);

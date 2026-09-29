@@ -3,7 +3,7 @@
  */
 
 const DB_NAME = 'GoodNotesWebDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -29,6 +29,27 @@ function getDB() {
 
       if (!db.objectStoreNames.contains('assets')) {
         db.createObjectStore('assets', { keyPath: 'id' });
+      }
+
+      // LifeCalendar: Event, To-Do, Deadline
+      if (!db.objectStoreNames.contains('calendar_events')) {
+        const evStore = db.createObjectStore('calendar_events', { keyPath: 'id' });
+        evStore.createIndex('date', 'date', { unique: false });
+        evStore.createIndex('type', 'type', { unique: false });
+        evStore.createIndex('userId', 'userId', { unique: false });
+      }
+
+      // LifeCalendar: Reading Plans
+      if (!db.objectStoreNames.contains('reading_plans')) {
+        const rpStore = db.createObjectStore('reading_plans', { keyPath: 'id' });
+        rpStore.createIndex('userId', 'userId', { unique: false });
+      }
+
+      // LifeCalendar: Reminders & Backlog
+      if (!db.objectStoreNames.contains('reminders')) {
+        const remStore = db.createObjectStore('reminders', { keyPath: 'id' });
+        remStore.createIndex('userId', 'userId', { unique: false });
+        remStore.createIndex('dueDate', 'dueDate', { unique: false });
       }
     };
 
@@ -597,5 +618,161 @@ window.Storage = {
       pagesCount: data.pages ? data.pages.length : 0,
       assetsCount: data.assets ? data.assets.length : 0
     };
+  },
+
+  // ── LifeCalendar: Calendar Events CRUD ─────────────────────────────
+  async saveCalendarEvent(event) {
+    if (!event || !event.id) return null;
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('calendar_events', 'readwrite');
+      const store = tx.objectStore('calendar_events');
+      const item = {
+        ...event,
+        updatedAt: Date.now(),
+        createdAt: event.createdAt || Date.now()
+      };
+      const req = store.put(item);
+      req.onsuccess = () => resolve(item);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async getCalendarEvents(userId) {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('calendar_events', 'readonly');
+      const store = tx.objectStore('calendar_events');
+      let req;
+      if (userId && store.indexNames.contains('userId')) {
+        req = store.index('userId').getAll(userId);
+      } else {
+        req = store.getAll();
+      }
+      req.onsuccess = () => {
+        let events = req.result || [];
+        if (userId && !store.indexNames.contains('userId')) {
+          events = events.filter(e => e.userId === userId);
+        }
+        resolve(events);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async deleteCalendarEvent(id) {
+    if (!id) return;
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('calendar_events', 'readwrite');
+      const store = tx.objectStore('calendar_events');
+      const req = store.delete(id);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  // ── LifeCalendar: Reading Plans CRUD ──────────────────────────────
+  async saveReadingPlan(plan) {
+    if (!plan || !plan.id) return null;
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('reading_plans', 'readwrite');
+      const store = tx.objectStore('reading_plans');
+      const item = {
+        ...plan,
+        updatedAt: Date.now(),
+        createdAt: plan.createdAt || Date.now()
+      };
+      const req = store.put(item);
+      req.onsuccess = () => resolve(item);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async getReadingPlans(userId) {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('reading_plans', 'readonly');
+      const store = tx.objectStore('reading_plans');
+      let req;
+      if (userId && store.indexNames.contains('userId')) {
+        req = store.index('userId').getAll(userId);
+      } else {
+        req = store.getAll();
+      }
+      req.onsuccess = () => {
+        let plans = req.result || [];
+        if (userId && !store.indexNames.contains('userId')) {
+          plans = plans.filter(p => p.userId === userId);
+        }
+        resolve(plans);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async deleteReadingPlan(id) {
+    if (!id) return;
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('reading_plans', 'readwrite');
+      const store = tx.objectStore('reading_plans');
+      const req = store.delete(id);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  // ── LifeCalendar: Reminders & Backlog CRUD ────────────────────────
+  async saveReminder(reminder) {
+    if (!reminder || !reminder.id) return null;
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('reminders', 'readwrite');
+      const store = tx.objectStore('reminders');
+      const item = {
+        ...reminder,
+        updatedAt: Date.now(),
+        createdAt: reminder.createdAt || Date.now()
+      };
+      const req = store.put(item);
+      req.onsuccess = () => resolve(item);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async getReminders(userId) {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('reminders', 'readonly');
+      const store = tx.objectStore('reminders');
+      let req;
+      if (userId && store.indexNames.contains('userId')) {
+        req = store.index('userId').getAll(userId);
+      } else {
+        req = store.getAll();
+      }
+      req.onsuccess = () => {
+        let list = req.result || [];
+        if (userId && !store.indexNames.contains('userId')) {
+          list = list.filter(r => r.userId === userId);
+        }
+        resolve(list);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async deleteReminder(id) {
+    if (!id) return;
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('reminders', 'readwrite');
+      const store = tx.objectStore('reminders');
+      const req = store.delete(id);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
   }
 };

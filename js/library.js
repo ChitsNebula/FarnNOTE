@@ -583,11 +583,23 @@ window.LibraryController = class LibraryController {
 
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (btn.id === 'btn-calendar-nav') {
+          document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          if (this.app && typeof this.app.showCalendar === 'function') {
+            this.app.showCalendar();
+          }
+          return;
+        }
         document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.currentFilter = btn.dataset.filter;
         document.getElementById('library-section-name').innerText = btn.querySelector('span').innerText;
-        this.loadLibrary();
+        if (this.app && typeof this.app.showLibrary === 'function') {
+          this.app.showLibrary();
+        } else {
+          this.loadLibrary();
+        }
       });
     });
 

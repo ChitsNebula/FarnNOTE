@@ -6,6 +6,7 @@ class App {
   constructor() {
     this.libraryScreen = document.getElementById('library-screen');
     this.editorScreen = document.getElementById('editor-screen');
+    this.calendarScreen = document.getElementById('calendar-screen');
 
     try {
       this.libraryController = new window.LibraryController(this);
@@ -34,6 +35,10 @@ class App {
       if (window.ClassroomExplorer && typeof window.ClassroomExplorer.init === 'function') {
         window.ClassroomExplorer.init(this);
       }
+
+      if (window.LifeCalendar && typeof window.LifeCalendar.init === 'function') {
+        window.LifeCalendar.init(this);
+      }
     } catch (err) {
       console.error('App initialization error:', err);
     }
@@ -41,14 +46,25 @@ class App {
 
   showLibrary() {
     if (this.editorScreen) this.editorScreen.classList.remove('active');
+    if (this.calendarScreen) this.calendarScreen.classList.remove('active');
     if (this.libraryScreen) this.libraryScreen.classList.add('active');
     if (this.libraryController) {
       this.libraryController.loadLibrary();
     }
   }
 
+  showCalendar() {
+    if (this.libraryScreen) this.libraryScreen.classList.remove('active');
+    if (this.editorScreen) this.editorScreen.classList.remove('active');
+    if (this.calendarScreen) this.calendarScreen.classList.add('active');
+    if (window.LifeCalendar && typeof window.LifeCalendar.show === 'function') {
+      window.LifeCalendar.show();
+    }
+  }
+
   async openNotebook(notebookId) {
     if (this.libraryScreen) this.libraryScreen.classList.remove('active');
+    if (this.calendarScreen) this.calendarScreen.classList.remove('active');
     if (this.editorScreen) this.editorScreen.classList.add('active');
     if (this.editorController && typeof this.editorController.openNotebook === 'function') {
       await this.editorController.openNotebook(notebookId);
