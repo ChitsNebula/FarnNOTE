@@ -457,6 +457,8 @@ window.CanvasEngine = class CanvasEngine {
 
     this.viewport.scrollLeft = Math.max(0, newScrollX);
     this.viewport.scrollTop  = Math.max(0, newScrollY);
+
+    this.scheduleZoomResolutionSettling();
   }
 
   pinchZoomAndPan(newLevel, currentMidX, currentMidY, lastMidX, lastMidY) {
@@ -497,6 +499,8 @@ window.CanvasEngine = class CanvasEngine {
 
     this.viewport.scrollLeft = Math.max(0, newScrollX);
     this.viewport.scrollTop  = Math.max(0, newScrollY);
+
+    this.scheduleZoomResolutionSettling();
   }
 
   setZoom(level) {
@@ -504,6 +508,7 @@ window.CanvasEngine = class CanvasEngine {
       this.zoom = Math.max(0.15, Math.min(3.0, level));
       this.pagesListContainer.style.transform = `scale(${this.zoom})`;
       this.onZoomChanged(this.zoom);
+      this.scheduleZoomResolutionSettling();
       return;
     }
     const viewportRect = this.viewport.getBoundingClientRect();
@@ -511,6 +516,7 @@ window.CanvasEngine = class CanvasEngine {
     const centerY = viewportRect.top + viewportRect.height / 2;
     this.zoomAtPoint(level, centerX, centerY);
     this._updateViewportPadding();
+    this.scheduleZoomResolutionSettling();
   }
 
   // Dynamically expands the gray workspace padding so there's always room to rest palm
@@ -526,6 +532,128 @@ window.CanvasEngine = class CanvasEngine {
     // Ensure horizontal padding stays 0 (CSS sets it but JS overrides to be safe)
     this.viewport.style.paddingLeft  = '0';
     this.viewport.style.paddingRight = '0';
+  }
+
+  // ── Dynamic Resolution Settling (Crisp Vector & Bezier Strokes on Zoom) ───
+  scheduleZoomResolutionSettling() {
+    if (this._zoomSettlingTimer) {
+      clearTimeout(this._zoomSettlingTimer);
+    }
+
+    this._zoomSettlingTimer = setTimeout(async () => {
+      this._zoomSettlingTimer = null;
+      if (!this.viewport || !this.pageViews || !this.pageViews.length) return;
+      if (this.isDrawing || this.isPanning || this.isPinching) {
+        this.scheduleZoomResolutionSettling();
+        return;
+      }
+
+      const deviceDpr = window.devicePixelRatio || 1;
+      const currentZoom = this.zoom || 1.0;
+      // Cap DPR safely to prevent GPU texture overflow (max 2.75x)
+      const targetDpr = Math.min(2.75, Math.max(1.25, Math.round(deviceDpr * Math.max(1.0, currentZoom) * 100) / 100));
+
+      const currentIdx = this.activePageIndex || 0;
+      const pagesToUpgrade = [currentIdx];
+      if (currentIdx + 1 < this.pageViews.length) pagesToUpgrade.push(currentIdx + 1);
+      if (currentIdx - 1 >= 0) pagesToUpgrade.push(currentIdx - 1);
+
+      for (const idx of pagesToUpgrade) {
+        const view = this.pageViews[idx];
+        if (view && view.canvasReady && Math.abs((view.dpr || 1.5) - targetDpr) >= 0.25) {
+          await this._upgradePageResolution(view, targetDpr);
+        }
+      }
+    }, 200);
+  }
+
+  async _upgradePageResolution(view, newDpr) {
+    if (!view || !view.canvasReady || view.canvasLoading) return;
+    if (Math.abs(view.dpr - newDpr) < 0.15) return;
+
+    view._renderSession = (view._renderSession || 0) + 1;
+    const session = view._renderSession;
+    view.dpr = newDpr;
+
+    const { width, height, pageData } = view;
+
+    const resizeCanvas = (canvas, isOpaque = false) => {
+      if (!canvas) return null;
+      canvas.width  = Math.round(width  * newDpr);
+      canvas.height = Math.round(height * newDpr);
+      const ctx = canvas.getContext('2d', { alpha: !isOpaque });
+      ctx.setTransform(newDpr, 0, 0, newDpr, 0, 0);
+      return ctx;
+    };
+
+    view.bgCtx     = resizeCanvas(view.bgCanvas, true);
+    view.strokeCtx = resizeCanvas(view.strokeCanvas, false);
+    view.activeCtx = resizeCanvas(view.activeCanvas, false);
+    view.uiCtx     = resizeCanvas(view.uiCanvas, false);
+
+    if (view.bgCtx) {
+      view.bgCtx.fillStyle = '#FFFFFF';
+      view.bgCtx.fillRect(0, 0, width, height);
+    }
+
+    let renderedVector = false;
+    let pdfPageNum = pageData.pdfPageNum;
+    if (!pdfPageNum && pageData.pdfAssetId) {
+      const m = pageData.pdfAssetId.match(/-page-(\d+)$/);
+      if (m) pdfPageNum = parseInt(m[1], 10);
+    }
+
+    if (pdfPageNum && window.PDFEngine && typeof window.PDFEngine.getPDFDoc === 'function') {
+      try {
+        const pdfDoc = await window.PDFEngine.getPDFDoc(pageData.notebookId, this.storage);
+        if (pdfDoc && pdfPageNum >= 1 && pdfPageNum <= pdfDoc.numPages) {
+          const pdfPage = await pdfDoc.getPage(pdfPageNum);
+          const unscaledVp = pdfPage.getViewport({ scale: 1.0 });
+          const vecScale = (width * newDpr) / unscaledVp.width;
+          const vecVp = pdfPage.getViewport({ scale: vecScale });
+
+          const vecCanvas = document.createElement('canvas');
+          vecCanvas.width  = Math.round(vecVp.width);
+          vecCanvas.height = Math.round(vecVp.height);
+          const vCtx = vecCanvas.getContext('2d', { alpha: false });
+          vCtx.fillStyle = '#FFFFFF';
+          vCtx.fillRect(0, 0, vecCanvas.width, vecCanvas.height);
+          await pdfPage.render({ canvasContext: vCtx, viewport: vecVp }).promise;
+
+          if (view._renderSession === session && view.bgCtx) {
+            view.bgCtx.drawImage(vecCanvas, 0, 0, width, height);
+            renderedVector = true;
+          }
+        }
+      } catch (err) {
+        console.warn('Dynamic resolution vector upgrade error:', err);
+      }
+    }
+
+    if (!renderedVector && view._renderSession === session && view.bgCtx) {
+      if (view._blobUrl) {
+        await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            if (view._renderSession === session && view.bgCtx) {
+              view.bgCtx.drawImage(img, 0, 0, width, height);
+            }
+            resolve();
+          };
+          img.onerror = resolve;
+          img.src = view._blobUrl;
+        });
+      } else if (pageData.template && this.drawTemplateBackground) {
+        this.drawTemplateBackground(view.bgCtx, pageData.template, width, height);
+      }
+    }
+
+    if (view._renderSession === session) {
+      // Re-render strokes & overlays with pixel-perfect Retina sharpness
+      this.renderPageStrokes(view);
+      this.renderPageTextOverlays(view);
+      this.renderPageImages(view);
+    }
   }
 
 
@@ -859,19 +987,16 @@ window.CanvasEngine = class CanvasEngine {
     const isLandscape = width > height;
     const deviceDpr = window.devicePixelRatio || 1;
 
-    // Cap DPR dynamically so max canvas texture dimension NEVER exceeds 2200px.
-    // This stops 4K texture explosions on large landscape slides (e.g. 1920x1080 -> 3840x2160 = 132MB/page)
-    // while guaranteeing pin-sharp Retina text rendering without GPU thrashing.
-    const maxDim = Math.max(width, height);
-    const maxAllowedDim = 2200;
-    const autoCapDpr = maxDim > 0 ? (maxAllowedDim / maxDim) : 2.0;
+    const currentZoom = this.zoom || 1.0;
+    const effectiveDpr = deviceDpr * Math.max(1.0, currentZoom);
 
-    let dpr;
-    if (isLandscape) {
-      dpr = Math.min(autoCapDpr, Math.max(1.25, Math.min(1.75, deviceDpr)));
-    } else {
-      dpr = Math.min(autoCapDpr, Math.max(1.5, Math.min(2.0, deviceDpr * 1.25)));
-    }
+    // Cap DPR dynamically so max canvas texture dimension NEVER exceeds 2800px.
+    // This allows ultra-sharp Retina/4K rendering without GPU thrashing.
+    const maxDim = Math.max(width, height);
+    const maxAllowedDim = 2800;
+    const autoCapDpr = maxDim > 0 ? (maxAllowedDim / maxDim) : 2.5;
+
+    let dpr = Math.min(autoCapDpr, Math.max(1.25, Math.min(2.75, effectiveDpr)));
     dpr = Math.round(dpr * 100) / 100;
 
     const container = document.createElement('div');
