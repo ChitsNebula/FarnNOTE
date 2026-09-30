@@ -114,13 +114,14 @@ window.AppSettings = {
 window.catmullRomSpline = function(points, maxSamplesPerSegment = 4) {
   if (!points || points.length < 3) return points || [];
 
-  // Pre-filter: remove points that are too close (< 1.8px) to prevent Catmull-Rom polynomial ripple
+  // Pre-filter: remove points that are too close (< 0.6px) to prevent Catmull-Rom polynomial ripple
+  // Low threshold ensures small Thai vowels, accents, and punctuation marks are fully captured
   const filtered = [points[0]];
   for (let i = 1; i < points.length; i++) {
     const prev = filtered[filtered.length - 1];
     const curr = points[i];
     const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y);
-    if (dist >= 1.8 || i === points.length - 1) {
+    if (dist >= 0.6 || i === points.length - 1) {
       filtered.push(curr);
     }
   }
@@ -138,7 +139,7 @@ window.catmullRomSpline = function(points, maxSamplesPerSegment = 4) {
 
     const segDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
     // Adaptive sample count: short segments don't need redundant sub-points!
-    const steps = Math.max(1, Math.min(maxSamplesPerSegment, Math.round(segDist / 3.5)));
+    const steps = Math.max(1, Math.min(maxSamplesPerSegment, Math.round(segDist / 2.0)));
 
     for (let t = 1; t <= steps; t++) {
       const u = t / steps;

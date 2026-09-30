@@ -551,7 +551,7 @@ window.CanvasEngine = class CanvasEngine {
       const deviceDpr = window.devicePixelRatio || 1;
       const currentZoom = this.zoom || 1.0;
       // Cap DPR safely to prevent GPU texture overflow (max 2.75x)
-      const targetDpr = Math.min(2.75, Math.max(1.25, Math.round(deviceDpr * Math.max(1.0, currentZoom) * 100) / 100));
+      const targetDpr = Math.min(2.75, Math.max(1.5, Math.round(deviceDpr * Math.max(1.0, currentZoom) * 100) / 100));
 
       const currentIdx = this.activePageIndex || 0;
       const pagesToUpgrade = [currentIdx];
@@ -996,7 +996,7 @@ window.CanvasEngine = class CanvasEngine {
     const maxAllowedDim = 2800;
     const autoCapDpr = maxDim > 0 ? (maxAllowedDim / maxDim) : 2.5;
 
-    let dpr = Math.min(autoCapDpr, Math.max(1.25, Math.min(2.75, effectiveDpr)));
+    let dpr = Math.min(autoCapDpr, Math.max(1.5, Math.min(2.75, effectiveDpr)));
     dpr = Math.round(dpr * 100) / 100;
 
     const container = document.createElement('div');
@@ -2054,8 +2054,9 @@ window.CanvasEngine = class CanvasEngine {
         const dy = rawPt.y - lastRaw.y;
         const dist = Math.hypot(dx, dy);
 
-        // 1. Hardware Jitter Deadzone: ignore micro-hops (< 1.2px) from digitizer quantization
-        if (dist < 1.2 && this.currentPoints.length > 1) {
+        // 1. Hardware Jitter Deadzone: ignore sub-pixel digitizer quantization while preserving tiny Thai accents
+        const deadzone = Math.max(0.35, 0.5 / (this.zoom || 1.0));
+        if (dist < deadzone && this.currentPoints.length > 1) {
           continue;
         }
         this._lastRawPt = rawPt;
@@ -3130,9 +3131,8 @@ window.CanvasEngine = class CanvasEngine {
       ctx.stroke();
 
     } else {
-      ctx.strokeStyle = color;
-
       if (penStyle === 'ballpoint' || points.length < 3) {
+        ctx.strokeStyle = color;
         ctx.lineWidth = size;
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
@@ -3144,55 +3144,83 @@ window.CanvasEngine = class CanvasEngine {
         ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
         ctx.stroke();
       } else {
-        // Continuous Midpoint Bézier Spline for Fountain & Brush Pen with dynamic pressure tapering
-        let midX = (points[0].x + points[1].x) / 2;
-        let midY = (points[0].y + points[1].y) / 2;
-
-        // First initial segment from p0 to mid0
-        const initPr = (points[0].pressure && !isNaN(points[0].pressure) && points[0].pressure > 0) ? points[0].pressure : 0.5;
-        let currentW = Math.max(1, size * (penStyle === 'brush' ? (0.3 + initPr * 1.3) : (0.5 + initPr * 0.8)));
-        ctx.lineWidth = currentW;
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        ctx.lineTo(midX, midY);
-        ctx.stroke();
-
-        for (let i = 1; i < points.length - 1; i++) {
-          const pCurrent = points[i];
-          const pNext = points[i + 1];
-          const nextMidX = (pCurrent.x + pNext.x) / 2;
-          const nextMidY = (pCurrent.y + pNext.y) / 2;
-
-          const pr = (pCurrent.pressure !== undefined && !isNaN(pCurrent.pressure) && pCurrent.pressure > 0)
-            ? pCurrent.pressure
-            : 0.5;
-          const pressureFactor = penStyle === 'brush'
-            ? (0.3 + pr * 1.3)
-            : (0.5 + pr * 0.8);
-          const segWidth = Math.max(1, size * pressureFactor);
-          // Smooth width transition between segments to eliminate stepped joint notches
-          currentW = currentW * 0.65 + segWidth * 0.35;
-
-          ctx.lineWidth = currentW;
-          ctx.beginPath();
-          ctx.moveTo(midX, midY);
-          ctx.quadraticCurveTo(pCurrent.x, pCurrent.y, nextMidX, nextMidY);
-          ctx.stroke();
-
-          midX = nextMidX;
-          midY = nextMidY;
+        // Continuous Smooth Ribbon Contour for Fountain & Brush Pen (Zero Scalloping / Zero Beading)
+        const n = points.length;
+        const widths = new Float32Array(n);
+        const pr0 = (points[0].pressure !== undefined && !isNaN(points[0].pressure) && points[0].pressure > 0) ? points[0].pressure : 0.5;
+        let curW = Math.max(0.6, size * (penStyle === 'brush' ? (0.25 + pr0 * 1.35) : (0.45 + pr0 * 0.85)));
+        widths[0] = curW;
+        for (let i = 1; i < n; i++) {
+          const pr = (points[i].pressure !== undefined && !isNaN(points[i].pressure) && points[i].pressure > 0) ? points[i].pressure : 0.5;
+          const factor = penStyle === 'brush' ? (0.25 + pr * 1.35) : (0.45 + pr * 0.85);
+          const targetW = Math.max(0.6, size * factor);
+          curW = curW * 0.65 + targetW * 0.35;
+          widths[i] = curW;
         }
 
-        // Final segment to last point
-        const lastPt = points[points.length - 1];
-        const lastPr = (lastPt.pressure && !isNaN(lastPt.pressure) && lastPt.pressure > 0) ? lastPt.pressure : 0.5;
-        const finalTargetW = Math.max(1, size * (penStyle === 'brush' ? (0.3 + lastPr * 1.3) : (0.5 + lastPr * 0.8)));
-        currentW = currentW * 0.65 + finalTargetW * 0.35;
-        ctx.lineWidth = currentW;
+        const leftPts = [];
+        const rightPts = [];
+        const angles = new Float32Array(n);
+
+        for (let i = 0; i < n; i++) {
+          let tx = 0, ty = 0;
+          if (i === 0) {
+            tx = points[1].x - points[0].x;
+            ty = points[1].y - points[0].y;
+          } else if (i === n - 1) {
+            tx = points[n - 1].x - points[n - 2].x;
+            ty = points[n - 1].y - points[n - 2].y;
+          } else {
+            tx = points[i + 1].x - points[i - 1].x;
+            ty = points[i + 1].y - points[i - 1].y;
+          }
+          const len = Math.hypot(tx, ty) || 1e-4;
+          const ux = tx / len;
+          const uy = ty / len;
+          angles[i] = Math.atan2(ty, tx);
+
+          const nx = -uy;
+          const ny = ux;
+          const hw = widths[i] / 2;
+
+          leftPts.push({ x: points[i].x + nx * hw, y: points[i].y + ny * hw });
+          rightPts.push({ x: points[i].x - nx * hw, y: points[i].y - ny * hw });
+        }
+
+        ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.moveTo(midX, midY);
-        ctx.lineTo(lastPt.x, lastPt.y);
-        ctx.stroke();
+
+        // Start at left 0
+        ctx.moveTo(leftPts[0].x, leftPts[0].y);
+
+        // Left edge forward with midpoint quadratic curves
+        for (let i = 0; i < n - 1; i++) {
+          const midLx = (leftPts[i].x + leftPts[i + 1].x) / 2;
+          const midLy = (leftPts[i].y + leftPts[i + 1].y) / 2;
+          ctx.quadraticCurveTo(leftPts[i].x, leftPts[i].y, midLx, midLy);
+        }
+        ctx.lineTo(leftPts[n - 1].x, leftPts[n - 1].y);
+
+        // End round cap
+        const endAngle = angles[n - 1];
+        const endHw = widths[n - 1] / 2;
+        ctx.arc(points[n - 1].x, points[n - 1].y, endHw, endAngle + Math.PI / 2, endAngle - Math.PI / 2, true);
+
+        // Right edge backward with midpoint quadratic curves
+        for (let i = n - 1; i > 0; i--) {
+          const midRx = (rightPts[i].x + rightPts[i - 1].x) / 2;
+          const midRy = (rightPts[i].y + rightPts[i - 1].y) / 2;
+          ctx.quadraticCurveTo(rightPts[i].x, rightPts[i].y, midRx, midRy);
+        }
+        ctx.lineTo(rightPts[0].x, rightPts[0].y);
+
+        // Start round cap
+        const startAngle = angles[0];
+        const startHw = widths[0] / 2;
+        ctx.arc(points[0].x, points[0].y, startHw, startAngle - Math.PI / 2, startAngle - 3 * Math.PI / 2, true);
+
+        ctx.closePath();
+        ctx.fill();
       }
     }
 
