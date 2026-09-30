@@ -1092,8 +1092,9 @@ window.EditorController = class EditorController {
     this.initToolbarDraggable();
 
     document.getElementById('btn-toggle-thumbnails').addEventListener('click', () => {
-      this.renderPageOverviewGrid();
-      document.getElementById('modal-page-overview').classList.remove('hidden');
+      const modal = document.getElementById('modal-page-overview');
+      if (modal) modal.classList.remove('hidden');
+      this.renderPageOverviewGrid(true);
     });
 
     document.getElementById('btn-close-overview').addEventListener('click', () => {
@@ -2239,9 +2240,9 @@ window.EditorController = class EditorController {
     }
   }
 
-  renderPageOverviewGrid() {
+  renderPageOverviewGrid(force = false) {
     const modal = document.getElementById('modal-page-overview');
-    if (modal && modal.classList.contains('hidden')) {
+    if (!force && modal && modal.classList.contains('hidden')) {
       // Modal is closed — DO NOT render any thumbnails! Saves 100% VRAM!
       return;
     }
@@ -2352,6 +2353,16 @@ window.EditorController = class EditorController {
       rootMargin: '200px 0px 200px 0px',
       threshold: 0.01
     });
+
+    // Eagerly render first visible thumbnails (~12 pages) immediately for instant display
+    const eagerCount = Math.min(cardsToObserve.length, 12);
+    for (let i = 0; i < eagerCount; i++) {
+      const item = cardsToObserve[i];
+      if (item.canvas && item.canvas.dataset.rendered !== 'true') {
+        item.canvas.dataset.rendered = 'true';
+        this.renderOverviewCardSnapshot(item.page, item.idx, item.canvas, item.thumbWidth, item.thumbHeight);
+      }
+    }
 
     cardsToObserve.forEach(item => {
       this._overviewThumbnailObserver.observe(item.card);

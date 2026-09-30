@@ -573,30 +573,11 @@ window.CanvasEngine = class CanvasEngine {
 
     view._renderSession = (view._renderSession || 0) + 1;
     const session = view._renderSession;
-    view.dpr = newDpr;
 
     const { width, height, pageData } = view;
 
-    const resizeCanvas = (canvas, isOpaque = false) => {
-      if (!canvas) return null;
-      canvas.width  = Math.round(width  * newDpr);
-      canvas.height = Math.round(height * newDpr);
-      const ctx = canvas.getContext('2d', { alpha: !isOpaque });
-      ctx.setTransform(newDpr, 0, 0, newDpr, 0, 0);
-      return ctx;
-    };
-
-    view.bgCtx     = resizeCanvas(view.bgCanvas, true);
-    view.strokeCtx = resizeCanvas(view.strokeCanvas, false);
-    view.activeCtx = resizeCanvas(view.activeCanvas, false);
-    view.uiCtx     = resizeCanvas(view.uiCanvas, false);
-
-    if (view.bgCtx) {
-      view.bgCtx.fillStyle = '#FFFFFF';
-      view.bgCtx.fillRect(0, 0, width, height);
-    }
-
-    let renderedVector = false;
+    // ── Phase 1: Pre-render High-Res Background OFFSCREEN (Double Buffering — Zero White Flash!) ──
+    let offscreenBg = null;
     let pdfPageNum = pageData.pdfPageNum;
     if (!pdfPageNum && pageData.pdfAssetId) {
       const m = pageData.pdfAssetId.match(/-page-(\d+)$/);
@@ -620,9 +601,8 @@ window.CanvasEngine = class CanvasEngine {
           vCtx.fillRect(0, 0, vecCanvas.width, vecCanvas.height);
           await pdfPage.render({ canvasContext: vCtx, viewport: vecVp }).promise;
 
-          if (view._renderSession === session && view.bgCtx) {
-            view.bgCtx.drawImage(vecCanvas, 0, 0, width, height);
-            renderedVector = true;
+          if (view._renderSession === session) {
+            offscreenBg = vecCanvas;
           }
         }
       } catch (err) {
@@ -630,13 +610,18 @@ window.CanvasEngine = class CanvasEngine {
       }
     }
 
-    if (!renderedVector && view._renderSession === session && view.bgCtx) {
+    if (!offscreenBg && view._renderSession === session) {
       if (view._blobUrl) {
         await new Promise((resolve) => {
           const img = new Image();
           img.onload = () => {
-            if (view._renderSession === session && view.bgCtx) {
-              view.bgCtx.drawImage(img, 0, 0, width, height);
+            if (view._renderSession === session) {
+              const offCanvas = document.createElement('canvas');
+              offCanvas.width  = Math.round(width * newDpr);
+              offCanvas.height = Math.round(height * newDpr);
+              const oCtx = offCanvas.getContext('2d', { alpha: false });
+              oCtx.drawImage(img, 0, 0, offCanvas.width, offCanvas.height);
+              offscreenBg = offCanvas;
             }
             resolve();
           };
@@ -644,16 +629,49 @@ window.CanvasEngine = class CanvasEngine {
           img.src = view._blobUrl;
         });
       } else if (pageData.template && this.drawTemplateBackground) {
-        this.drawTemplateBackground(view.bgCtx, pageData.template, width, height);
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width  = Math.round(width * newDpr);
+        offCanvas.height = Math.round(height * newDpr);
+        const oCtx = offCanvas.getContext('2d', { alpha: false });
+        oCtx.scale(newDpr, newDpr);
+        this.drawTemplateBackground(oCtx, pageData.template, width, height);
+        offscreenBg = offCanvas;
       }
     }
 
-    if (view._renderSession === session) {
-      // Re-render strokes & overlays with pixel-perfect Retina sharpness
-      this.renderPageStrokes(view);
-      this.renderPageTextOverlays(view);
-      this.renderPageImages(view);
+    // Session invalidated by a newer zoom/pan action -> drop obsolete render
+    if (view._renderSession !== session) return;
+
+    // ── Phase 2: Synchronous Atomic Swap (Zero ms White Flash!) ──
+    view.dpr = newDpr;
+
+    const resizeCanvas = (canvas, isOpaque = false) => {
+      if (!canvas) return null;
+      canvas.width  = Math.round(width  * newDpr);
+      canvas.height = Math.round(height * newDpr);
+      const ctx = canvas.getContext('2d', { alpha: !isOpaque });
+      ctx.setTransform(newDpr, 0, 0, newDpr, 0, 0);
+      return ctx;
+    };
+
+    view.bgCtx     = resizeCanvas(view.bgCanvas, true);
+    view.strokeCtx = resizeCanvas(view.strokeCanvas, false);
+    view.activeCtx = resizeCanvas(view.activeCanvas, false);
+    view.uiCtx     = resizeCanvas(view.uiCanvas, false);
+
+    if (view.bgCtx) {
+      if (offscreenBg) {
+        view.bgCtx.drawImage(offscreenBg, 0, 0, width, height);
+      } else {
+        view.bgCtx.fillStyle = '#FFFFFF';
+        view.bgCtx.fillRect(0, 0, width, height);
+      }
     }
+
+    // Synchronously paint crisp strokes and overlays in the same frame
+    this.renderPageStrokes(view);
+    this.renderPageTextOverlays(view);
+    this.renderPageImages(view);
   }
 
 
