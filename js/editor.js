@@ -813,9 +813,11 @@ window.EditorController = class EditorController {
       this.pages.splice(insertIndex, 0, newPage);
       this.pages.forEach((p, idx) => p.index = idx);
 
-      // Persist all shifted pages to IndexedDB
-      for (let i = insertIndex; i < this.pages.length; i++) {
-        await window.Storage.savePage(this.pages[i]);
+      // Persist shifted pages in 1 single lightning-fast batch transaction
+      if (window.Storage && window.Storage.savePagesBatch) {
+        await window.Storage.savePagesBatch(this.pages.slice(insertIndex));
+      } else {
+        await window.Storage.savePage(newPage);
       }
 
       if (this.currentNotebook) {
@@ -823,10 +825,18 @@ window.EditorController = class EditorController {
         await window.Storage.saveNotebook(this.currentNotebook);
       }
 
-      await this.canvasEngine.loadPages(this.pages, window.Storage, insertIndex);
+      // In-place DOM insertion: avoids destroying & recreating 200 page views!
+      if (this.canvasEngine && this.canvasEngine.insertPageAt) {
+        await this.canvasEngine.insertPageAt(newPage, insertIndex);
+      } else {
+        await this.canvasEngine.loadPages(this.pages, window.Storage, insertIndex);
+      }
+
       this.renderThumbnails();
       this.updatePageCounter();
-      if (typeof this.renderPageOverviewGrid === 'function') {
+      // Only render heavy overview grid if modal is actually open
+      const overviewModal = document.getElementById('modal-page-overview');
+      if (overviewModal && !overviewModal.classList.contains('hidden')) {
         this.renderPageOverviewGrid();
       }
       this.handleActivePageChanged(insertIndex);
@@ -2145,7 +2155,14 @@ window.EditorController = class EditorController {
 
 
   async renderOverviewCardSnapshot(page, idx, snapshotCanvas, pWidth, pHeight) {
-    const sCtx = snapshotCanvas.getContext('2d');
+    if (!snapshotCanvas) return;
+    const sCtx = snapshotCanvas.getContext('2d', { alpha: false });
+    if (!sCtx) return;
+
+    const origW = page.width || 794;
+    const origH = page.height || 1123;
+    const scaleX = pWidth / origW;
+    const scaleY = pHeight / origH;
 
     // 1. Fill white canvas background
     sCtx.fillStyle = '#FFFFFF';
@@ -2153,7 +2170,7 @@ window.EditorController = class EditorController {
 
     const view = this.canvasEngine.pageViews ? this.canvasEngine.pageViews[idx] : null;
 
-    // 2. Render from active canvas if in memory
+    // 2. Render from active canvas if in memory (Instant Blit)
     if (view && view.canvasReady && view.bgCanvas && view.strokeCanvas) {
       try {
         sCtx.drawImage(view.bgCanvas, 0, 0, pWidth, pHeight);
@@ -2165,52 +2182,82 @@ window.EditorController = class EditorController {
     // 3. Offscreen / VRAM recycled page: Fetch PDF background asset from IndexedDB
     const storage = window.Storage || this.canvasEngine.storage;
     if (page.pdfAssetId && storage) {
-      try {
-        let imgUrl = page._cachedPdfUrl;
-        if (!imgUrl) {
-          const blob = await storage.getAsset(page.pdfAssetId);
+      let imgUrl = page._cachedPdfUrl;
+      const drawPdf = (url) => {
+        const img = new Image();
+        img.onload = () => {
+          sCtx.drawImage(img, 0, 0, pWidth, pHeight);
+          if (page.strokes && this.canvasEngine.drawSingleStroke) {
+            sCtx.save();
+            sCtx.scale(scaleX, scaleY);
+            page.strokes.forEach(s => this.canvasEngine.drawSingleStroke(sCtx, s));
+            sCtx.restore();
+          }
+        };
+        img.src = url;
+      };
+
+      if (imgUrl) {
+        drawPdf(imgUrl);
+      } else {
+        storage.getAsset(page.pdfAssetId).then(blob => {
           if (blob) {
             imgUrl = URL.createObjectURL(blob);
             page._cachedPdfUrl = imgUrl;
+            drawPdf(imgUrl);
+          } else {
+            if (this.canvasEngine.drawTemplateBackground) {
+              sCtx.save();
+              sCtx.scale(scaleX, scaleY);
+              this.canvasEngine.drawTemplateBackground(sCtx, page.template || 'grid', origW, origH);
+              sCtx.restore();
+            }
           }
-        }
-        if (imgUrl) {
-          await new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              sCtx.drawImage(img, 0, 0, pWidth, pHeight);
-              resolve();
-            };
-            img.onerror = resolve;
-            img.src = imgUrl;
-          });
-        } else {
+        }).catch(() => {
           if (this.canvasEngine.drawTemplateBackground) {
-            this.canvasEngine.drawTemplateBackground(sCtx, page.template || 'grid', pWidth, pHeight);
+            sCtx.save();
+            sCtx.scale(scaleX, scaleY);
+            this.canvasEngine.drawTemplateBackground(sCtx, page.template || 'grid', origW, origH);
+            sCtx.restore();
           }
-        }
-      } catch(e) {
-        if (this.canvasEngine.drawTemplateBackground) {
-          this.canvasEngine.drawTemplateBackground(sCtx, page.template || 'grid', pWidth, pHeight);
-        }
+        });
       }
     } else {
       if (this.canvasEngine.drawTemplateBackground) {
-        this.canvasEngine.drawTemplateBackground(sCtx, page.template || 'grid', pWidth, pHeight);
+        sCtx.save();
+        sCtx.scale(scaleX, scaleY);
+        this.canvasEngine.drawTemplateBackground(sCtx, page.template || 'grid', origW, origH);
+        sCtx.restore();
       }
-    }
-
-    // 4. Draw strokes on top
-    if (page.strokes && this.canvasEngine.drawSingleStroke) {
-      page.strokes.forEach(s => this.canvasEngine.drawSingleStroke(sCtx, s));
+      // 4. Draw strokes on top
+      if (page.strokes && this.canvasEngine.drawSingleStroke) {
+        sCtx.save();
+        sCtx.scale(scaleX, scaleY);
+        page.strokes.forEach(s => this.canvasEngine.drawSingleStroke(sCtx, s));
+        sCtx.restore();
+      }
     }
   }
 
   renderPageOverviewGrid() {
+    const modal = document.getElementById('modal-page-overview');
+    if (modal && modal.classList.contains('hidden')) {
+      // Modal is closed — DO NOT render any thumbnails! Saves 100% VRAM!
+      return;
+    }
+
     const gridEl = document.getElementById('page-overview-grid');
     if (!gridEl) return;
 
+    // Disconnect any existing thumbnail observer
+    if (this._overviewThumbnailObserver) {
+      this._overviewThumbnailObserver.disconnect();
+      this._overviewThumbnailObserver = null;
+    }
+
     gridEl.innerHTML = '';
+
+    const cardsToObserve = [];
 
     this.pages.forEach((page, idx) => {
       const card = document.createElement('div');
@@ -2235,12 +2282,15 @@ window.EditorController = class EditorController {
 
       thumbBox.style.aspectRatio = `${pWidth} / ${pHeight}`;
 
-      const snapshotCanvas = document.createElement('canvas');
-      snapshotCanvas.width = pWidth;
-      snapshotCanvas.height = pHeight;
-      snapshotCanvas.className = 'overview-thumb-canvas-img';
+      // Scaled down thumbnail canvas (Max width 160px) — cuts VRAM from 3.5MB to 140KB per page!
+      const thumbWidth = 160;
+      const thumbHeight = Math.round(160 * (pHeight / pWidth));
 
-      this.renderOverviewCardSnapshot(page, idx, snapshotCanvas, pWidth, pHeight);
+      const snapshotCanvas = document.createElement('canvas');
+      snapshotCanvas.width = thumbWidth;
+      snapshotCanvas.height = thumbHeight;
+      snapshotCanvas.className = 'overview-thumb-canvas-img';
+      snapshotCanvas.dataset.rendered = 'false';
 
       thumbBox.appendChild(snapshotCanvas);
 
@@ -2277,6 +2327,34 @@ window.EditorController = class EditorController {
       });
 
       gridEl.appendChild(card);
+      cardsToObserve.push({ card, page, idx, canvas: snapshotCanvas, thumbWidth, thumbHeight });
+    });
+
+    // Lazy load thumbnails with IntersectionObserver (only renders the ~8-12 cards on screen!)
+    const gridContainer = document.querySelector('.page-overview-grid-container') || null;
+    this._overviewThumbnailObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const cardEl = entry.target;
+          const canvas = cardEl.querySelector('.overview-thumb-canvas-img');
+          if (canvas && canvas.dataset.rendered !== 'true') {
+            canvas.dataset.rendered = 'true';
+            const pageIdx = parseInt(cardEl.dataset.pageIndex, 10);
+            const pageObj = this.pages[pageIdx];
+            if (pageObj) {
+              this.renderOverviewCardSnapshot(pageObj, pageIdx, canvas, canvas.width, canvas.height);
+            }
+          }
+        }
+      });
+    }, {
+      root: gridContainer,
+      rootMargin: '200px 0px 200px 0px',
+      threshold: 0.01
+    });
+
+    cardsToObserve.forEach(item => {
+      this._overviewThumbnailObserver.observe(item.card);
     });
   }
 
@@ -2402,8 +2480,11 @@ window.EditorController = class EditorController {
     this.pages.splice(pageIndex + 1, 0, newPage);
     this.pages.forEach((p, idx) => p.index = idx);
 
-    for (let i = pageIndex + 1; i < this.pages.length; i++) {
-      await window.Storage.savePage(this.pages[i]);
+    // Persist shifted pages in 1 single fast batch transaction
+    if (window.Storage && window.Storage.savePagesBatch) {
+      await window.Storage.savePagesBatch(this.pages.slice(pageIndex + 1));
+    } else {
+      await window.Storage.savePage(newPage);
     }
 
     if (this.currentNotebook) {
@@ -2411,10 +2492,19 @@ window.EditorController = class EditorController {
       await window.Storage.saveNotebook(this.currentNotebook);
     }
 
-    await this.canvasEngine.loadPages(this.pages, window.Storage, pageIndex + 1);
+    // Ultra-fast in-place DOM insertion
+    if (this.canvasEngine && this.canvasEngine.insertPageAt) {
+      await this.canvasEngine.insertPageAt(newPage, pageIndex + 1);
+    } else {
+      await this.canvasEngine.loadPages(this.pages, window.Storage, pageIndex + 1);
+    }
+
     this.renderThumbnails();
     this.updatePageCounter();
-    this.renderPageOverviewGrid();
+    const overviewModal = document.getElementById('modal-page-overview');
+    if (overviewModal && !overviewModal.classList.contains('hidden')) {
+      this.renderPageOverviewGrid();
+    }
     this.handleActivePageChanged(pageIndex + 1);
     this.autoSave();
   }
@@ -2430,9 +2520,10 @@ window.EditorController = class EditorController {
     this.pages.splice(pageIndex + 1, 0, clonedPage);
     this.pages.forEach((p, idx) => p.index = idx);
 
-    await window.Storage.savePage(clonedPage);
-    for (let i = 0; i < this.pages.length; i++) {
-      await window.Storage.savePage(this.pages[i]);
+    if (window.Storage && window.Storage.savePagesBatch) {
+      await window.Storage.savePagesBatch(this.pages.slice(pageIndex + 1));
+    } else {
+      await window.Storage.savePage(clonedPage);
     }
 
     if (this.currentNotebook) {
@@ -2440,10 +2531,18 @@ window.EditorController = class EditorController {
       await window.Storage.saveNotebook(this.currentNotebook);
     }
 
-    await this.canvasEngine.loadPages(this.pages, window.Storage, pageIndex + 1);
+    if (this.canvasEngine && this.canvasEngine.insertPageAt) {
+      await this.canvasEngine.insertPageAt(clonedPage, pageIndex + 1);
+    } else {
+      await this.canvasEngine.loadPages(this.pages, window.Storage, pageIndex + 1);
+    }
+
     this.renderThumbnails();
     this.updatePageCounter();
-    this.renderPageOverviewGrid();
+    const overviewModal = document.getElementById('modal-page-overview');
+    if (overviewModal && !overviewModal.classList.contains('hidden')) {
+      this.renderPageOverviewGrid();
+    }
     this.handleActivePageChanged(pageIndex + 1);
     this.autoSave();
 
@@ -2479,8 +2578,12 @@ window.EditorController = class EditorController {
     }
 
     this.pages.forEach((p, idx) => p.index = idx);
-    for (let i = 0; i < this.pages.length; i++) {
-      await window.Storage.savePage(this.pages[i]);
+    if (window.Storage && window.Storage.savePagesBatch) {
+      await window.Storage.savePagesBatch(this.pages.slice(pageIndex));
+    } else {
+      for (let i = 0; i < this.pages.length; i++) {
+        await window.Storage.savePage(this.pages[i]);
+      }
     }
 
     if (this.currentNotebook) {
@@ -2492,9 +2595,17 @@ window.EditorController = class EditorController {
       this.currentPageIndex = Math.max(0, this.pages.length - 1);
     }
 
-    await this.canvasEngine.loadPages(this.pages, window.Storage);
+    if (this.canvasEngine && this.canvasEngine.deletePageAt) {
+      await this.canvasEngine.deletePageAt(pageIndex);
+    } else {
+      await this.canvasEngine.loadPages(this.pages, window.Storage, this.currentPageIndex);
+    }
+
     this.updatePageCounter();
-    this.renderPageOverviewGrid();
+    const overviewModal = document.getElementById('modal-page-overview');
+    if (overviewModal && !overviewModal.classList.contains('hidden')) {
+      this.renderPageOverviewGrid();
+    }
     this.autoSave();
 
     if (window.CustomDialog && window.CustomDialog.toast) {
@@ -2817,10 +2928,16 @@ window.EditorController = class EditorController {
       }
     }
 
-    // Persist all affected pages
+    // Persist all affected pages in 1 fast batch
     for (let i = 0; i < this.pages.length; i++) {
       this.pages[i].index = i;
-      await window.Storage.savePage(this.pages[i]);
+    }
+    if (window.Storage && window.Storage.savePagesBatch) {
+      await window.Storage.savePagesBatch(this.pages);
+    } else {
+      for (let i = 0; i < this.pages.length; i++) {
+        await window.Storage.savePage(this.pages[i]);
+      }
     }
 
     // Reload canvas engine and thumbnails
@@ -2922,13 +3039,21 @@ window.EditorController = class EditorController {
     }
 
     const backup = this._notesUndoStack.pop();
+    const modifiedPages = [];
     for (const saved of backup) {
       const page = this.pages.find(p => p.id === saved.id);
       if (page) {
         page.strokes = saved.strokes;
         page.textBoxes = saved.textBoxes;
         page.images = saved.images;
-        await window.Storage.savePage(page);
+        modifiedPages.push(page);
+      }
+    }
+    if (window.Storage && window.Storage.savePagesBatch) {
+      await window.Storage.savePagesBatch(modifiedPages);
+    } else {
+      for (const p of modifiedPages) {
+        await window.Storage.savePage(p);
       }
     }
 

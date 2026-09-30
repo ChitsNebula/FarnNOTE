@@ -759,6 +759,99 @@ window.CanvasEngine = class CanvasEngine {
     });
   }
 
+  // Ultra-Fast In-Place Page Insertion (Zero DOM Wiping / Instant 60fps)
+  async insertPageAt(pageData, index) {
+    if (!this.pageViews) this.pageViews = [];
+    if (!this.pages) this.pages = [];
+
+    // Dynamically expand workspace container min-width if page is wider
+    if (pageData.width && pageData.width > 794) {
+      const containerW = Math.max(3600, pageData.width + 2800);
+      if (containerW > this.containerWidth) {
+        this.containerWidth = containerW;
+        this.pagesListContainer.style.minWidth = `${containerW}px`;
+      }
+    }
+
+    const safeIndex = Math.max(0, Math.min(this.pages.length, index));
+    this.pages.splice(safeIndex, 0, pageData);
+    const view = this._createPagePlaceholder(pageData, safeIndex);
+    this.pageViews.splice(safeIndex, 0, view);
+
+    // Insert DOM container at the exact index without touching other 200 nodes
+    const nextView = this.pageViews[safeIndex + 1];
+    if (nextView && nextView.container) {
+      this.pagesListContainer.insertBefore(view.container, nextView.container);
+    } else {
+      this.pagesListContainer.appendChild(view.container);
+    }
+
+    // Update subsequent view indices & tags
+    for (let i = safeIndex + 1; i < this.pageViews.length; i++) {
+      const v = this.pageViews[i];
+      v.index = i;
+      if (v.container) {
+        v.container.dataset.pageIndex = i;
+        const tag = v.container.querySelector('.page-number-tag');
+        if (tag) tag.innerText = `หน้า ${i + 1}`;
+      }
+    }
+
+    // Observe newly added container
+    if (this._pageObserver) {
+      this._pageObserver.observe(view.container);
+    }
+
+    // Initialize canvases for new page
+    await this._initPageCanvases(view);
+
+    // Scroll to new page smoothly
+    await this.scrollToPage(safeIndex);
+    this.activePageIndex = safeIndex;
+    if (typeof this.onActivePageChanged === 'function') {
+      this.onActivePageChanged(safeIndex);
+    }
+  }
+
+  // Ultra-Fast In-Place Page Deletion (Zero DOM Wiping / Clean VRAM Recycle)
+  async deletePageAt(index) {
+    if (!this.pageViews || index < 0 || index >= this.pageViews.length) return;
+    const view = this.pageViews[index];
+    if (!view) return;
+
+    if (this._pageObserver && view.container) {
+      this._pageObserver.unobserve(view.container);
+    }
+    this._destroyPageCanvases(view);
+    if (view._blobUrl) {
+      try { URL.revokeObjectURL(view._blobUrl); } catch(e) {}
+    }
+    if (view.container && view.container.parentNode) {
+      view.container.parentNode.removeChild(view.container);
+    }
+
+    this.pages.splice(index, 1);
+    this.pageViews.splice(index, 1);
+
+    // Update subsequent indices
+    for (let i = index; i < this.pageViews.length; i++) {
+      const v = this.pageViews[i];
+      v.index = i;
+      if (v.container) {
+        v.container.dataset.pageIndex = i;
+        const tag = v.container.querySelector('.page-number-tag');
+        if (tag) tag.innerText = `หน้า ${i + 1}`;
+      }
+    }
+
+    const newActive = Math.max(0, Math.min(this.pageViews.length - 1, index));
+    this.activePageIndex = newActive;
+    await this.scrollToPage(newActive);
+    if (typeof this.onActivePageChanged === 'function') {
+      this.onActivePageChanged(newActive);
+    }
+  }
+
   // Creates a lightweight page placeholder div (no canvas, no GPU memory)
   _createPagePlaceholder(pageData, index) {
     const width  = pageData.width  || 794;

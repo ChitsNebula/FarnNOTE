@@ -283,6 +283,20 @@ window.Storage = {
     });
   },
 
+  async savePagesBatch(pages) {
+    if (!pages || !pages.length) return;
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('pages', 'readwrite');
+      const store = tx.objectStore('pages');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      for (const p of pages) {
+        store.put(_sanitizePageForStorage(p));
+      }
+    });
+  },
+
   async deletePage(id) {
     const db = await getDB();
     return new Promise((resolve, reject) => {
