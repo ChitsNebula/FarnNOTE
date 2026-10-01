@@ -2031,7 +2031,7 @@ window.CanvasEngine = class CanvasEngine {
         // Draw eraser cursor circle on ui canvas so user can see eraser boundary
         this.clearLayer(view.uiCtx, view);
         const ctx = view.uiCtx;
-        const r = window.ToolState.eraserSize || 20;
+        const r = this.getEffectiveEraserRadius();
         ctx.save();
         ctx.beginPath();
         ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
@@ -3501,6 +3501,13 @@ window.CanvasEngine = class CanvasEngine {
     view.pageData.strokes.forEach(s => this.drawSingleStroke(view.strokeCtx, s));
   }
 
+  // Returns eraser radius in page coordinates so that its visual screen size remains constant regardless of zoom level
+  getEffectiveEraserRadius() {
+    const baseSize = window.ToolState.eraserSize || 20;
+    const currentZoom = Math.max(0.1, this.zoom || 1.0);
+    return baseSize / currentZoom;
+  }
+
   pixelErase(view, pt) {
     if (!this._eraserUndoCaptured) {
       this._eraserUndoCaptured = true;
@@ -3511,14 +3518,14 @@ window.CanvasEngine = class CanvasEngine {
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
-    ctx.arc(pt.x, pt.y, window.ToolState.eraserSize || 20, 0, Math.PI * 2);
+    ctx.arc(pt.x, pt.y, this.getEffectiveEraserRadius(), 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
   eraseStrokesAndImagesAtPoint(view, pt) {
     if (!view.pageData) return;
-    const radius = window.ToolState.eraserSize || 20;
+    const radius = this.getEffectiveEraserRadius();
     const r2 = radius * radius;
     let strokesModified = false;
     let imagesModified = false;
