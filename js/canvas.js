@@ -1846,6 +1846,7 @@ window.CanvasEngine = class CanvasEngine {
         if (window.ToolState.eraserMode === 'pixel') {
           this.pixelErase(view, pt);
         }
+        this.drawEraserCursor(view, pt);
         return;
       }
     }, { passive: false });
@@ -2028,25 +2029,8 @@ window.CanvasEngine = class CanvasEngine {
           }
         }
 
-        // Draw eraser cursor circle on ui canvas so user can see eraser boundary
-        this.clearLayer(view.uiCtx, view);
-        const ctx = view.uiCtx;
-        const r = this.getEffectiveEraserRadius();
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(80, 80, 80, 0.85)';
-        ctx.lineWidth = 1.5 / this.zoom;
-        ctx.setLineDash([4 / this.zoom, 3 / this.zoom]);
-        ctx.stroke();
-        // Inner white ring for contrast on dark backgrounds
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.lineWidth = 0.8 / this.zoom;
-        ctx.setLineDash([]);
-        ctx.stroke();
-        ctx.restore();
+        // Draw premium Clean Frosted Glass eraser cursor
+        this.drawEraserCursor(view, pt);
         return;
       }
 
@@ -3506,6 +3490,46 @@ window.CanvasEngine = class CanvasEngine {
     const baseSize = window.ToolState.eraserSize || 20;
     const currentZoom = Math.max(0.1, this.zoom || 1.0);
     return baseSize / currentZoom;
+  }
+
+  // Renders premium Clean Frosted Glass eraser cursor (GoodNotes 6 / iPad style)
+  drawEraserCursor(view, pt) {
+    if (!view || !view.uiCtx) return;
+    this.clearLayer(view.uiCtx, view);
+    const ctx = view.uiCtx;
+    const r = this.getEffectiveEraserRadius();
+    const z = Math.max(0.1, this.zoom || 1.0);
+    const isErasing = !!this.isDrawing;
+
+    ctx.save();
+
+    // 1. Soft Frosted Inner Tint — clearly marks the active deletion zone without obscuring content beneath
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = isErasing ? 'rgba(0, 0, 0, 0.08)' : 'rgba(0, 0, 0, 0.035)';
+    ctx.fill();
+
+    // 2. Outer White Contrast Halo — ensures crystal-clear visibility on dark PDFs, images, or dark mode
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, r + (0.6 / z), 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1.0 / z;
+    ctx.stroke();
+
+    // 3. Crisp Solid Ring — premium minimal border (no ugly dashed dots)
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = isErasing ? 'rgba(20, 24, 30, 0.88)' : 'rgba(50, 54, 62, 0.68)';
+    ctx.lineWidth = (isErasing ? 1.4 : 1.2) / z;
+    ctx.stroke();
+
+    // 4. Center Precision Dot — tiny targeting pip for pixel-exact pen/finger orientation
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 1.0 / z, 0, Math.PI * 2);
+    ctx.fillStyle = isErasing ? 'rgba(20, 24, 30, 0.85)' : 'rgba(50, 54, 62, 0.65)';
+    ctx.fill();
+
+    ctx.restore();
   }
 
   pixelErase(view, pt) {
